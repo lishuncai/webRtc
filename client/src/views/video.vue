@@ -2,15 +2,26 @@
   <div class="video-wrapper">
     <button @click="getUserMediaStream">点击录像</button>
     <button @click="stopStream">关闭录像</button>
-    <video id="rtcA" ref="videoA" src="" preload="auto" />
-    <video id="rtcB" ref="videoB" src="" preload="auto" />
+    <button @click="call">call</button>
+    <video
+      id="rtcA"
+      ref="videoA"
+      src=""
+      autoplay
+    />
+    <video
+      id="rtcB"
+      ref="videoB"
+      src=""
+      autoplay
+    />
   </div>
 </template>
 
 <script>
 export default {
   name: '',
-  data () {
+  data() {
     return {
       peerA: null,
       peerB: null,
@@ -18,17 +29,17 @@ export default {
       localstream: null
     }
   },
-  mounted () {
+  mounted() {
     // this.getUserMediaStream()
   },
   methods: {
-    stopStream () {
+    stopStream() {
       this.localstream.getTracks().forEach(track => {
         track.stop()
       })
     },
     // 获取本地媒体流
-    getUserMediaStream () {
+    getUserMediaStream() {
       const constraints = {
         video: {
           facingMode: 'user'
@@ -75,22 +86,33 @@ export default {
     },
 
     // 初始化 RTCPeerConnection
-    initPeer () {
+    initPeer() {
       const PeerConnection = window.RTCPeerConnection ||
         window.mozRTCPeerConnection ||
         window.webkitRTCPeerConnection
 
       console.log('PeerConnection', PeerConnection)
-      const iceServers = {
-        iceServers: [
+      // const iceServers = {
+      //   iceServers: [
+      //     {
+      //       url: 'stun:stun.l.google.com:19302'
+      //     }
+      //   ]
+      // }
+      let iceServer = {
+        "iceServers": [
           {
-            url: 'stun:stun.l.google.com:19302'
+            "url": "stun:stun.l.google.com:19302"
           }
         ]
+      };
+      this.peerA = new PeerConnection(iceServer)
+      this.peerB = new PeerConnection(iceServer)
+      try {
+        this.peerA.addStream(this.localstream)
+      } catch (err) {
+        throw ('添加流信息失败', err)
       }
-      this.peerA = new PeerConnection(iceServers)
-      this.peerB = new PeerConnection(iceServers)
-      this.peerA.addStream(this.localstream)
       this.peerA.onicecandidate = (event) => {
         // 监听 A 的ICE候选信息 如果收集到，就添加给 B 连接状态
         if (event.candidate) {
@@ -99,16 +121,19 @@ export default {
         } else {
           console.log('没有获取到候选信息')
         }
-        this.call()
       }
       // 如果检测到媒体流连接到本地，将其绑定到一个video标签上输出
+      // this.peerB.onaddstream = (event) => {
+      //   const video = this.$refs.videoB
+      //   video.srcObject = event.stream
+      //   video.onloadedmetadata = (e) => {
+      //     console.log('可以播放了')
+      //     video.play()
+      //   }
+      // }
       this.peerB.onaddstream = (event) => {
         const video = this.$refs.videoB
         video.srcObject = event.stream
-        video.onloadedmetadata = (e) => {
-          console.log('可以播放了')
-          video.play()
-        }
       }
       this.peerB.onicecandidate = (event) => {
         if (event.candidate) {
@@ -116,7 +141,7 @@ export default {
         }
       }
     },
-    async call () {
+    async call() {
       console.log('创建offer信息')
 
       const offer = await this.peerA.createOffer({
@@ -127,21 +152,21 @@ export default {
       await this.onCreateOffer(offer)
     },
     // 生成offer信息
-    async onCreateOffer (desc) {
+    async onCreateOffer(desc) {
       console.log('设置offer描述')
       try {
         await this.peerA.setLocalDescription(desc) // 呼叫端设置本地 offer 描述
         await this.peerB.setRemoteDescription(desc) // 接收端设置远程 offer 描述
-        await this.onCreateAnswer()
+        let answer = await this.peerB.createAnswer()
+        this.onCreateAnswer(answer)
       } catch (err) {
         console.error(err)
       }
     },
     // 生成answer信息
-    async onCreateAnswer () {
+    async onCreateAnswer(answer) {
       console.log('设置answer描述')
       try {
-        const answer = await this.peerB.createAnswer() // 接收端创建 answer
         await this.peerB.setLocalDescription(answer) // 接收端设置本地 answer 描述
         await this.peerA.setRemoteDescription(answer) // 呼叫端端设置远程 answer 描述
       } catch (err) {

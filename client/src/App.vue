@@ -7,9 +7,6 @@
       <router-link to="/video">
         进入房间
       </router-link>
-       <router-link to="/demo">
-        进入房间(demo)
-      </router-link>
     </div>
     <router-view />
   </div>
