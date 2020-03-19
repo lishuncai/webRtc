@@ -51,13 +51,14 @@ export default {
 
       navigator.mediaDevices.getUserMedia(constraints)
         .then((stream) => {
-          const video = document.querySelector('#rtcA')
+          const video = this.$refs.videoA
 
           // video.srcObject = window.URL.createObjectURL(stream)
           video.src = window.URL.createObjectURL(stream) || stream
-          video.onloadedmetadata = function (e) {
+          video.onloadedmetadata = (e) => {
             console.log('可以播放了')
             video.play()
+            this.initPeer()
           }
         })
         .catch((err) => {
@@ -82,9 +83,14 @@ export default {
         }
         this.call()
       }
-      this.peerB.onaddstream = (event) => {
+      this.peerB.onaddstream = (stream) => {
         const video = this.$refs.videoB
-        video.srcObject = event.stream
+        video.src = window.URL.createObjectURL(stream) || stream
+        video.onloadedmetadata = (e) => {
+          console.log('可以播放了')
+          video.play()
+          this.initPeer()
+        }
       }
       this.peerB.onicecandidate = (event) => {
         if (event.candidate) {
