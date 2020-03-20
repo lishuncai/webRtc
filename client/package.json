@@ -10,6 +10,7 @@
   "dependencies": {
     "adapterjs": "^0.15.4",
     "core-js": "^3.6.4",
+    "muse-ui": "^3.0.2",
     "register-service-worker": "^1.6.2",
     "socket.io-client": "^2.3.0",
     "vconsole": "^3.3.4",

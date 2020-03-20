@@ -6,9 +6,13 @@ import store from './store'
 import socket from './socket'
 import VConsole from 'vconsole'
 
+import MuseUI from 'muse-ui';
+import 'muse-ui/dist/muse-ui.css';
+
+Vue.use(MuseUI);
 Vue.config.productionTip = false
 
-Vue.$socket = socket
+Vue.prototype.$socket = socket
 var vConsole = new VConsole()
 console.log('vConsole', vConsole)
 new Vue({

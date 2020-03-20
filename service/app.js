@@ -6,15 +6,9 @@ const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
 const path = require('path')
 const { historyApiFallback } = require('koa2-connect-history-api-fallback');
-
-const server = require('http').createServer(app.callback())
-
-const io = require('socket.io')(server);
-
-server.listen(3001, '0.0.0.0')
-
 const index = require('./routes/index')
 
+require('./socket')
 
 // error handler
 onerror(app)
@@ -44,10 +38,6 @@ app.on('error', (err, ctx) => {
 });
 
 
-io.on('connection', function (socket) {
-  socket.emit('news', { hello: 'world' });
-  socket.on('hello', function (data) {
-    console.log(data);
-  });
-});
+
+
 module.exports = app

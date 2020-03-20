@@ -1,8 +1,8 @@
 <template>
   <div class="video-wrapper">
-    <button @click="getUserMediaStream">点击录像</button>
-    <button @click="stopStream">关闭录像</button>
-    <button @click="call">call</button>
+    <mu-button flat @click="getUserMediaStream">点击录像</mu-button>/
+    <mu-button flat @click="stopStream">关闭录像</mu-button>/
+    <mu-button flat @click="call">Call他</mu-button>
     <video
       id="rtcA"
       ref="videoA"
@@ -25,7 +25,6 @@ export default {
     return {
       peerA: null,
       peerB: null,
-      offerOption: '',
       localstream: null
     }
   },
