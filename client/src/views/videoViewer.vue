@@ -136,7 +136,7 @@ export default {
       this.peer.onicecandidate = (event) => {
         if (event.candidate) {
           this.$socket.emit('candidate', {
-            account: this.account,
+            roomId: this.roomId,
             candidate: event.candidate
           })
         } else {
@@ -148,18 +148,8 @@ export default {
           this.createOthervideo(event.stream)
         }
       }
-      this.peer.addIcecandidate = (event) => {
-        if (event.candidate) {
-          this.$socket.emit('candidate', {
-            account: this.account,
-            desc: event.candidate
-          })
-        } else {
-          console.log('没有获取到候选信息')
-        }
-      }
       this.$socket.on('candidate', (data) => {
-        this.peer.addIcecandidate(data.candidate)
+        this.peer.addIcecandidate(data.detail)
       })
       this.$socket.on('answer', (data) => {
         this.peer.setRemoteDescription(data)

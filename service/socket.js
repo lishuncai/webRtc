@@ -1,27 +1,26 @@
 const server = require('http').createServer()
 const io = require('socket.io')(server);
-server.listen(3001, '0.0.0.0')
+server.listen(3000, '0.0.0.0')
 
 let baseId = 1000
-let roomIds = []
 
-let roomInfos = new Map()
-let offers = [
+const roomInfos = new Map()
+const offers = [
   // {
   //   account,
-  //   desc
+  //   detail
   // }
 ]
-let answers = [
+const answers = [
   // {
   //   account,
-  //   desc
+  //   detail
   // }
 ]
-let candidate = [
+const candidates = [
   // {
   //   account,
-  //   desc
+  //   detail
   // }
 ]
 
@@ -83,26 +82,37 @@ io.on('connection', function (socket) {
     }
   })
   socket.on('offer', function(data) {
-    offers.push(data)
-    socket.broadcast.emit('offer', data)
-    console.log('推送offer')
+    let {roomId, offer} = data
+    offers.push({
+      roomId: roomId,
+      detail: offer
+    })
+    socket.broadcast.to(roomId).emit('answer', data)
+    console.log('推送answer')
   })
   socket.on('answer', function(data) {
-    answers.push(data)
-    socket.broadcast.emit('answer', data)
+    let {roomId, answer} = data
+    answers.push({
+      roomId: roomId,
+      detail: answer
+    })
+    socket.broadcast.to(roomId).emit('answer', data)
     console.log('推送answer')
-
   })
   socket.on('candidate', function(data) {
-    candidate.push(data)
-    socket.broadcast.emit('candidate', data)
+    let {roomId, candidate} = data
+    candidates.push({
+      roomId: roomId,
+      detail: candidate
+    })
+    socket.broadcast.to(roomId).emit('candidate', data)
     console.log('推送candidate')
   })
 });
 
 io.on('disconnection', function() {
-  console.log('连接终端')
-  roomIds = []
+  console.log('连接中断')
+  console.log('当前房间剩余', roomInfos.size, roomInfos)
 })
 
 function createRoom({creater, roomId, desc='', joins}) {
