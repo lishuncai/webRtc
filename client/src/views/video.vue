@@ -98,13 +98,13 @@ export default {
       //     }
       //   ]
       // }
-      let iceServer = {
-        "iceServers": [
+      const iceServer = {
+        iceServers: [
           {
-            "url": "stun:stun.l.google.com:19302"
+            url: 'stun:stun.l.google.com:19302'
           }
         ]
-      };
+      }
       this.peerA = new PeerConnection(iceServer)
       this.peerB = new PeerConnection(iceServer)
       try {
@@ -156,7 +156,7 @@ export default {
       try {
         await this.peerA.setLocalDescription(desc) // 呼叫端设置本地 offer 描述
         await this.peerB.setRemoteDescription(desc) // 接收端设置远程 offer 描述
-        let answer = await this.peerB.createAnswer()
+        const answer = await this.peerB.createAnswer()
         this.onCreateAnswer(answer)
       } catch (err) {
         console.error(err)

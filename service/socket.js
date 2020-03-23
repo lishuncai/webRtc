@@ -4,7 +4,6 @@ server.listen(3001, '0.0.0.0')
 
 let baseId = 1000
 let roomIds = []
-let accounts = []
 
 let roomInfos = new Map()
 let offers = [
@@ -28,20 +27,16 @@ let candidate = [
 
 
 io.on('connection', function (socket) {
-  // socket.on('createRoom', function(fn) {
-  //   let newRoomId = baseId + roomIds.length
-  //   roomIds.push(newRoomId)
-  //   fn(null, newRoomId)
-  //   console.log('当前存在房间号：', roomIds)
-  // })
   socket.on('createRoom', function(account, fn) {
-    let roomId = baseId + roomInfos.size
+    let roomId = String(baseId++)
     let detail = createRoom({
       creater: account,
-      roomId: roomId
+      roomId: roomId,
+      joins: new Set()
     })
     roomInfos.set(roomId, detail)
     console.log([...roomInfos])
+    socket.join(roomId)
     fn(detail)
   })
   socket.on('getRoomInfo', function(roomId, fn) {
@@ -49,20 +44,43 @@ io.on('connection', function (socket) {
     console.log('roomInfos:',[...roomInfos],'\n', 'roomId:result',roomId, result)
     if (result) {
       fn ('', result)
+    } else {
+      fn('找不到房间')
     }
   })
   socket.emit('news', { hello: 'world' });
   socket.on('hello', function (id, data) {
     console.log('hello', data);
   });
-  socket.on('join', function(fn) {
-    let account = baseId + accounts.length
-    accounts.push(account)
-    fn(null, {
-      account
-    })
-    io.to(socket.id).emit('joned', `新人${account}加入`)
-    console.log(`新人${account}加入`)
+  socket.on('join', function(data, fn) {
+    const {roomId, account} = data
+    const room = roomInfos.get(roomId)
+    console.log('根据id查询room',typeof data.roomId, data.roomId, room)
+    if (room && account) {
+      if (!room.joins.has(account)){
+        room.joins.add(account)
+        fn(null)
+        socket.join(roomId)
+        io.to(roomId).emit('joned', `新人${account}加入`)
+      } else {
+        fn(null)
+      }
+    } else {
+      fn('房间不存在')
+    }
+  })
+  socket.on('leave', function(data){
+    let {roomId, account} = data
+    let room = roomInfos.get(roomId)
+    if (room) {
+      room.joins.delete(account)
+      io.to(roomId).emit('level', `${account}离开了房间`)
+      if (room.joins.size === 0) {
+        roomInfos.delete(roomInfos)
+        console.log(`房间${roomId}已解散`, '剩余', roomInfos.size)
+        socket.leave(roomId)
+      }
+    }
   })
   socket.on('offer', function(data) {
     offers.push(data)
@@ -87,10 +105,11 @@ io.on('disconnection', function() {
   roomIds = []
 })
 
-function createRoom({creater, roomId, desc}) {
+function createRoom({creater, roomId, desc='', joins}) {
   return {
     creater,
     roomId,
-    desc
+    desc,
+    joins
   }
 }

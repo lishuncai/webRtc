@@ -30,7 +30,7 @@
 }
 
 #nav {
-  
+
   a {
     font-weight: bold;
     color: #fff;
