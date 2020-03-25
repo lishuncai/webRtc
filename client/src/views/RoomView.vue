@@ -1,18 +1,30 @@
 <template>
   <div>
     <div>
-      1.0.7
-      <!-- <h1>房间{{ roomId }}</h1> -->
-      <div class="main">
-        <button @click="getUserMediaStream" :disabled="!account">打开录像</button>
-        <button @click="callOther">call他</button>
-        <button @click="stopStream">关闭通话</button>
-        <div class="mine">
-          <video ref="mineVideo" class="mine-video" src="" autoplay />
-        </div>
-        <div class="others" ref="othersBox"></div>
+      <button
+        @click="call"
+      >开始通话</button>
+      <!-- <button @click="getUserMediaStream">创建通话</button> -->
+      <button @click="stopStream">关闭通话</button>
+    </div>
+    <div class="main">
+      <div
+        class="others"
+        refs="othersBox"
+      ></div>
+      <div class="mine">
+        <video
+          ref="mineVideo"
+          class="mine-video"
+          src=""
+          autoplay
+        />
       </div>
     </div>
+    <div
+      class="note-wrapper"
+      ref="noteWrapper"
+    ></div>
   </div>
 </template>
 
@@ -20,30 +32,55 @@
 export default {
   props: {
     roomId: null,
-    account: null,
-    isCreater: {
-      type: Boolean,
-      default: false
-    }
+    account: null
   },
-  name: '',
   data() {
     return {
+      offer: null,
+      answer: null,
+      candidate: null,
       peer: null,
       localstream: null,
       streams: [],
-      offer: null,
-      answer: null,
-      answerOther: null,
-      candidate: null
+      isALive: false
     }
   },
   computed: {
-    isAlive() {
-      return this.$store.state.socketALive
+    keepAlive() {
+      return this.$store.state.keepAlive
+    }
+  },
+  watch: {
+    keepAlive: {
+      handler(val) {
+        if (val) {
+          this.join()
+        }
+      },
+      immediate: true
+    }
+  },
+  mounted() {
+    if (window.keepAlive) {
+      this.join()
+    } else {
+
     }
   },
   methods: {
+    join() {
+      this.$socket.emit('join', {
+        roomId: this.roomId,
+        account: this.account
+      }, (err, data) => {
+        if (err) throw (err)
+        this.getUserMediaStream()
+        const newNode = document.createElement('div')
+        newNode.innerHTML = `<span>${this.account}</span>`
+        const children = this.$refs.noteWrapper.children
+        this.$refs.noteWrapper.insertBefore(newNode, children[0])
+      })
+    },
     createOthervideo(stream) {
       this.streams.push(stream)
       const video = document.createElement('video')
@@ -53,10 +90,6 @@ export default {
       this.$refs.othersBox.appendChild(video)
     },
     stopStream() {
-      if (!this.localstream) {
-        this.$toast.warning('当前无录像')
-        return
-      }
       this.localstream.getTracks().forEach(track => {
         track.stop()
       })
@@ -106,7 +139,6 @@ export default {
             console.log('可以播放了')
             video.play()
             this.initPeer()
-            this.callOther()
           }
         })
         .catch((err) => {
@@ -129,18 +161,19 @@ export default {
         ]
       }
       this.peer = new PeerConnection(iceServer)
-      console.log('this.peer', this.peer)
-      if (this.localstream) {
+      try {
         this.peer.addStream(this.localstream)
+      } catch (err) {
+        throw ('添加流信息失败', err)
       }
       this.peer.onicecandidate = (event) => {
         if (event.candidate) {
           this.$socket.emit('candidate', {
-            roomId: this.roomId,
+            account: this.account,
             candidate: event.candidate
           })
         } else {
-          console.log('没有获取到候选信息')
+          this.$toast.error('没有获取到候选信息')
         }
       }
       this.peer.onaddstream = (event) => {
@@ -148,47 +181,58 @@ export default {
           this.createOthervideo(event.stream)
         }
       }
+      this.peer.addIceCandidate = (event) => {
+        if (event.candidate) {
+          this.$socket.emit('candidate', {
+            account: this.account,
+            desc: event.candidate
+          })
+        } else {
+          console.log('没有获取到候选信息')
+        }
+      }
       this.$socket.on('candidate', (data) => {
-        console.log('收到candidate')
-        console.log('this.peer', this.peer)
-        this.peer.addIceCandidate(data.detail)
+        this.peer.addIceCandidate(data.candidate)
       })
       this.$socket.on('answer', (data) => {
-        console.log('收到answer')
-        this.answerOther = data
         this.peer.setRemoteDescription(data)
       })
       this.$socket.on('offer', async (data) => {
-        console.log('推送answer')
-        await this.peer.setRemoteDescription(data)
+        this.peer.setRemoteDescription(data)
         const answer = await this.peer.createAnswer()
         this.answer = answer
-        await this.peer.setLocalDescription(answer)
+        this.peer.setLocalDescription(answer)
         this.$socket.emit('answer', {
-          roomId: this.roomId,
           account: this.account,
-          desc: this.peer.localDescription
+          desc: answer
         })
       })
     },
-    async callOther() {
-      this.$socket.emit('hello', { d: 2 })
+    async call() {
+      if (!this.peer) {
+        this.$toast.error('通话失败')
+      }
+      console.log('创建offer信息')
       const offer = await this.peer.createOffer({
         offerToReceiveAudio: 1,
         offerToReceiveVideo: 1
       })
       console.log('创建offer信息完成')
-      this.onCreateOffer(offer)
+      this.offer = offer
+      await this.onCreateOffer(offer)
     },
     // 生成offer信息
     async onCreateOffer(desc) {
-      await this.peer.setLocalDescription(desc)
-      console.log('保存offer描述')
-      this.$socket.emit('offer', {
-        roomId: this.roomId,
-        account: this.account,
-        desc
-      }) // 呼叫端设置本地 offer 描述
+      console.log('设置offer描述')
+      try {
+        this.$socket.emit('offer', {
+          account: this.account,
+          desc
+        }) // 呼叫端设置本地 offer 描述
+        // await this.peerB.setRemoteDescription(desc) // 接收端设置远程 offer 描述
+      } catch (err) {
+        console.error(err)
+      }
     }
   }
 }
@@ -218,6 +262,16 @@ export default {
       background: #eee;
     }
   }
-
+  .note-wrapper {
+    position: fixed;
+    overflow-y: scroll;
+    right: 0;
+    bottom: 10px;
+    width: 160px;
+    min-height: 200px;
+    border: 1px dashed #aaa;
+    opacity: 0.56;
+    z-index: 10;
+  }
 }
 </style>
