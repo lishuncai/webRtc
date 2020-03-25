@@ -7,11 +7,14 @@ const logger = require('koa-logger')
 const path = require('path')
 const { historyApiFallback } = require('koa2-connect-history-api-fallback');
 const index = require('./routes/index')
-
+// const sslify = require('koa-sslify').default;
 require('./socket')
 
 // error handler
 onerror(app)
+
+// 访问时会强制使用https
+// app.use(sslify());
 
 // middlewares
 app.use(bodyparser({
@@ -19,7 +22,7 @@ app.use(bodyparser({
 }))
 app.use(json())
 app.use(logger())
-app.use(require('koa-static')(path.join(__dirname, '../client/dist')))
+app.use(require('koa-static')(path.join(__dirname, 'public')))
 
 // logger
 app.use(async (ctx, next) => {
@@ -36,8 +39,6 @@ app.use(historyApiFallback({ whiteList: ['/api'] }));
 app.on('error', (err, ctx) => {
   console.error('server error', err, ctx)
 });
-
-
 
 
 module.exports = app

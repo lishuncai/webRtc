@@ -1,7 +1,12 @@
-const server = require('http').createServer()
-const io = require('socket.io')(server);
-server.listen(3000, '0.0.0.0')
-
+const fs = require("fs")
+const httpsServer = require('https').createServer({
+  key : fs.readFileSync("./cert/cert.key"),
+  cert: fs.readFileSync("./cert/cert.pem")
+})
+const useHttps = 0;
+const server = require('http').createServer();
+const io = require('socket.io')(useHttps?httpsServer:server);
+useHttps?httpsServer.listen(3001, '0.0.0.0'):server.listen(3001, '0.0.0.0')
 let baseId = 1000
 
 const roomInfos = new Map()

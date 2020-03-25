@@ -1,0 +1,107 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="https://unpkg.com/current-device/umd/current-device.min.js"></script>
+</head>
+
+<body>
+  <div>
+    <label>
+      输入schame: <input type="text" id="schemaInput">
+    </label>
+  </div>
+  <br>
+  <div>
+    <label>选择要打开的本地app</label>
+    <select name="" id="schemas">
+      <option value="#">/</option>
+      <option value="sms://">sms://</option>
+      <option value="alipay://">alipay://</option>
+      <option value="weixin://">weixin://</option>
+      <option value="mqq://">mqq://</option>
+      <option value="taobao://">taobao://</option>
+      <option value="dingtalk://">dingtalk://</option>
+    </select>
+  </div>
+  <br>
+  <div>
+    <a href="javascript:void(0)" onClick="openApp()"> 打开应用</a>
+    <br>
+    <br>
+    <a href="https://baidu.com" id="tip" style="display: none;" class="showTip">没有安装？去下载</a>
+  </div>
+
+  <script>
+    // 客户端检测
+    var ue = {}
+    ue.browserInfo = function () {
+      var json = {
+        userAgent: navigator.userAgent.toLowerCase(),
+        isAndroid: Boolean(navigator.userAgent.match(/android/ig)),
+        isIos: Boolean(navigator.userAgent.match(/iphone|ipod|ipad/ig)),
+        isWeChat: Boolean(navigator.userAgent.match(/MicroMessenger/ig)),
+        isQQ: Boolean(navigator.userAgent.match(/ QQ/ig)),
+        isQQBrowser: Boolean(navigator.userAgent.match(/MQQBrowser/ig))
+      }
+
+      return json;
+    }
+
+    // 初始化
+    var browser = ue.browserInfo();
+    var scheme = '';
+    var iosVersion = browser.userAgent.match(/os\s*(\d+)/);
+    var universalLink = '#';
+
+    iosVersion = iosVersion ? (iosVersion[1] || 0) : 0;
+
+    // if (browser.isAndroid) { // 安卓
+    //   scheme = 'weixin://';
+    // } else if (browser.isIos) { // ios
+    //   scheme = 'weixin://';
+    // }
+    // openApp()
+    function openApp() {
+      document.querySelector('#tip').style.display = 'none'
+      console.log('点击生效')
+      //客户端检测微信
+      var inputBox = document.querySelector('#schemaInput')
+      var selectBox = document.querySelector('#schemas')
+      scheme = inputBox.value || selectBox.value
+      if (browser.isWeChat) {
+        alert('请在其他浏览器打开')
+      } else {
+        if (device.mobile()) {
+          if (browser.isAndroid ) {
+            window.location.href = scheme;
+          } else {
+            console.log('isIos')
+            // ios9+
+            if (iosVersion >= 9) {
+              document.location.href = universalLink;
+            } else {
+              setTimeout(function () { // 必须要使用settimeout
+                var a = document.createElement("a"); //创建a元素
+                a.setAttribute("href", scheme);
+                a.style.display = "none";
+                document.body.appendChild(a);
+              }, 0)
+            }
+          }
+        } else {
+          console.log('isPc')
+          window.location.href = scheme;
+        }
+
+        setTimeout(function () {
+          document.querySelector('#tip').style.display = 'block'
+        }, 2000);
+      }
+    }
+  </script>
+</body>
+
+</html>
