@@ -1,6 +1,7 @@
 <template>
   <div>
     <div>
+      1.0.0
       <!-- <h1>房间{{ roomId }}</h1> -->
       <div class="main">
         <button @click="getUserMediaStream" :disabled="!account">打开录像</button>
@@ -128,6 +129,7 @@ export default {
         ]
       }
       this.peer = new PeerConnection(iceServer)
+      console.log('this.peer', this.peer)
       try {
         this.peer.addStream(this.localstream)
       } catch (err) {
@@ -149,19 +151,23 @@ export default {
         }
       }
       this.$socket.on('candidate', (data) => {
+        console.log('收到candidate')
         this.peer.addIcecandidate(data.detail)
       })
       this.$socket.on('answer', (data) => {
+        console.log('收到answer')
         this.peer.setRemoteDescription(data)
       })
       this.$socket.on('offer', async (data) => {
-        this.peer.setRemoteDescription(data)
+        console.log('推送answer')
+        await this.peer.setRemoteDescription(data)
         const answer = await this.peer.createAnswer()
         this.answer = answer
-        this.peer.setLocalDescription(answer)
+        await this.peer.setLocalDescription(answer)
         this.$socket.emit('answer', {
+          roomId: this.roomId,
           account: this.account,
-          desc: answer
+          desc: this.peer.localDescription
         })
       })
     },
@@ -176,16 +182,14 @@ export default {
     },
     // 生成offer信息
     async onCreateOffer(desc) {
-      console.log('设置offer描述')
-      try {
+      this.peer.setLocalDescription(desc, () => {
         this.$socket.emit('offer', {
+          roomId: this.roomId,
           account: this.account,
           desc
         }) // 呼叫端设置本地 offer 描述
-        // await this.peerB.setRemoteDescription(desc) // 接收端设置远程 offer 描述
-      } catch (err) {
-        console.error(err)
-      }
+      })
+      console.log('保存offer描述')
     }
   }
 }

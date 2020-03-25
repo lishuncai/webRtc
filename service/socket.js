@@ -87,30 +87,34 @@ io.on('connection', function (socket) {
     }
   })
   socket.on('offer', function(data) {
-    let {roomId, offer} = data
+    console.log('收到offer', data)
+    let {roomId, desc} = data
     offers.push({
       roomId: roomId,
-      detail: offer
+      detail: desc
     })
-    socket.broadcast.to(roomId).emit('answer', data)
-    console.log('推送answer')
+    socket.broadcast.to(roomId).emit('offer', desc)
+    console.log('推送offer')
   })
   socket.on('answer', function(data) {
-    let {roomId, answer} = data
+    console.log('收到answer', data)
+    let {roomId, desc} = data
     answers.push({
       roomId: roomId,
-      detail: answer
+      detail: desc
     })
-    socket.broadcast.to(roomId).emit('answer', data)
+    socket.broadcast.to(roomId).emit('answer', desc)
     console.log('推送answer')
   })
   socket.on('candidate', function(data) {
+    console.log('收到candidate', data)
     let {roomId, candidate} = data
-    candidates.push({
+    let obj  = {
       roomId: roomId,
       detail: candidate
-    })
-    socket.broadcast.to(roomId).emit('candidate', data)
+    }
+    candidates.push(obj)
+    socket.broadcast.to(roomId).emit('candidate', obj)
     console.log('推送candidate')
   })
 });
