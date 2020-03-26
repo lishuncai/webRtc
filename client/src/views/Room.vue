@@ -26,7 +26,6 @@ export default {
 
   beforeRouteLeave (to, from, next) {
     this.levelRoom()
-    this.$refs.noteWrapper.innerHTML = ''
     next()
   },
   async activated() {

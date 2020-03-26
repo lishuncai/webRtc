@@ -1,12 +1,7 @@
-const fs = require("fs")
-const httpsServer = require('https').createServer({
-  key : fs.readFileSync("./cert/cert.key"),
-  cert: fs.readFileSync("./cert/cert.pem")
-})
-const useHttps = 0;
+
 const server = require('http').createServer();
-const io = require('socket.io')(useHttps?httpsServer:server);
-useHttps?httpsServer.listen(3001, '0.0.0.0'):server.listen(3001, '0.0.0.0')
+const io = require('socket.io')(server);
+server.listen(3001, '0.0.0.0')
 let baseId = 1000
 
 const roomInfos = new Map()
@@ -29,7 +24,6 @@ const candidates = [
   // }
 ]
 
-
 io.on('connection', function (socket) {
   socket.on('createRoom', function(account, fn) {
     let roomId = String(baseId++)
@@ -45,7 +39,7 @@ io.on('connection', function (socket) {
   })
   socket.on('getRoomInfo', function(roomId, fn) {
     let result = roomInfos.get(roomId)
-    console.log('roomInfos:',[...roomInfos],'\n', 'roomId:result',roomId, result)
+    console.log('roomInfos:', [...roomInfos], '\n', 'roomId:result',roomId, result)
     if (result) {
       fn ('', result)
     } else {
@@ -80,7 +74,7 @@ io.on('connection', function (socket) {
       room.joins.delete(account)
       io.to(roomId).emit('level', `${account}离开了房间`)
       if (room.joins.size === 0) {
-        roomInfos.delete(roomInfos)
+        roomInfos.delete(roomId)
         console.log(`房间${roomId}已解散`, '剩余', roomInfos.size)
         socket.leave(roomId)
       }
@@ -88,33 +82,20 @@ io.on('connection', function (socket) {
   })
   socket.on('offer', function(data) {
     console.log('收到offer', data)
-    let {roomId, desc} = data
-    offers.push({
-      roomId: roomId,
-      detail: desc
-    })
-    socket.broadcast.to(roomId).emit('offer', desc)
+    offers.push(data)
+    socket.broadcast.to(data.roomId).emit('offer', data)
     console.log('推送offer')
   })
   socket.on('answer', function(data) {
     console.log('收到answer', data)
-    let {roomId, desc} = data
-    answers.push({
-      roomId: roomId,
-      detail: desc
-    })
-    socket.broadcast.to(roomId).emit('answer', desc)
+    answers.push(data)
+    socket.broadcast.to(data.roomId).emit('answer', data)
     console.log('推送answer')
   })
   socket.on('candidate', function(data) {
     console.log('收到candidate', data)
-    let {roomId, candidate} = data
-    let obj  = {
-      roomId: roomId,
-      detail: candidate
-    }
-    candidates.push(obj)
-    socket.broadcast.to(roomId).emit('candidate', obj)
+    candidates.push(data)
+    socket.broadcast.to(data.roomId).emit('candidate', data)
     console.log('推送candidate')
   })
 });

@@ -1,16 +1,22 @@
 <template>
   <div>
     <div>
-      1.0.7
-      <!-- <h1>房间{{ roomId }}</h1> -->
+      版本：1.0.9
       <div class="main">
-        <button @click="getUserMediaStream" :disabled="!account">打开录像</button>
-        <button @click="callOther">call他</button>
-        <button @click="stopStream">关闭通话</button>
+        <div class="button-wrapper">
+          <mu-button @click="getUserMediaStream" :disabled="isConnecting">
+            开始录像
+          </mu-button>
+          <mu-button @click="createCannel">初始化连接</mu-button>
+          <mu-button @click="stopStream">关闭通话</mu-button>
+        </div>
+
         <div class="mine">
           <video ref="mineVideo" class="mine-video" src="" autoplay />
         </div>
-        <div class="others" ref="othersBox"></div>
+        <div class="others" ref="othersBox">
+          <video id="rtcB" src="" autoplay class="othersvideo" ref="videoB"></video>
+        </div>
       </div>
     </div>
   </div>
@@ -35,7 +41,8 @@ export default {
       offer: null,
       answer: null,
       answerOther: null,
-      candidate: null
+      candidate: null,
+      isConnecting: false
     }
   },
   computed: {
@@ -44,15 +51,29 @@ export default {
     }
   },
   methods: {
-    createOthervideo(stream) {
-      this.streams.push(stream)
-      const video = document.createElement('video')
-      video.className = 'others-video'
-      video.autoplay = true
-      video.srcObject = stream
-      this.$refs.othersBox.appendChild(video)
+    createOthervideo(event) {
+      this.streams.push(event.stream)
+      // const video = document.createElement('video')
+      // video.className = 'othersvideo'
+      // video.autoplay = 'autoplay'
+      // video.srcObject = event.stream
+      // const children = this.$refs.othersBox.children
+
+      let video = document.createElement('video');
+          video.controls = true;
+          video.autoplay = 'autoplay';
+          video.srcObject = event.stream;
+          this.$refs.othersBox.appendChild(video)
+
+      // if (children[0]) {
+      //   this.$refs.othersBox.insertBefore(video, children[0])
+      // } else {
+      //   this.$refs.othersBox.appendChild(video)
+      // }
+      this.$refs.videoB.srcObject = event.stream
     },
     stopStream() {
+      this.isConnecting = false
       if (!this.localstream) {
         this.$toast.warning('当前无录像')
         return
@@ -104,16 +125,19 @@ export default {
           video.srcObject = stream
           video.onloadedmetadata = (e) => {
             console.log('可以播放了')
+            this.isConnecting = true
             video.play()
-            this.initPeer()
-            this.callOther()
+            this.createCannel()
           }
         })
         .catch((err) => {
           console.error(err)
         })
     },
-
+    createCannel() {
+      this.initPeer()
+      this.callOther()
+    },
     // 初始化 RTCPeerConnection
     initPeer() {
       const PeerConnection = window.RTCPeerConnection ||
@@ -145,49 +169,59 @@ export default {
       }
       this.peer.onaddstream = (event) => {
         if (event.stream) {
-          this.createOthervideo(event.stream)
+          this.createOthervideo(event)
         }
       }
       this.$socket.on('candidate', (data) => {
-        console.log('收到candidate')
-        console.log('this.peer', this.peer)
-        this.peer.addIceCandidate(data.detail)
+        if (data.candidate) {
+          console.log('收到candidate')
+          console.log('this.peer', this.peer)
+          this.peer.addIceCandidate(data.candidate)
+        } else {
+          console.log('没有candidate', data.candidate)
+        }
       })
       this.$socket.on('answer', (data) => {
-        console.log('收到answer')
-        this.answerOther = data
-        this.peer.setRemoteDescription(data)
+        if (data.answer) {
+          console.log('收到answer')
+          this.answerOther = data
+          this.peer.setRemoteDescription(data.answer)
+        } else {
+          console.log('没有answer内容', data)
+        }
       })
       this.$socket.on('offer', async (data) => {
-        console.log('推送answer')
-        await this.peer.setRemoteDescription(data)
-        const answer = await this.peer.createAnswer()
-        this.answer = answer
-        await this.peer.setLocalDescription(answer)
-        this.$socket.emit('answer', {
-          roomId: this.roomId,
-          account: this.account,
-          desc: this.peer.localDescription
-        })
+        if (data.offer) {
+          console.log('搜到offer')
+          await this.peer.setRemoteDescription(data.offer)
+          const answer = await this.peer.createAnswer()
+          this.answer = answer
+          await this.peer.setLocalDescription(answer)
+
+          this.$socket.emit('answer', {
+            roomId: this.roomId,
+            account: this.account,
+            answer: this.peer.localDescription
+          })
+          console.log('推送answer')
+        } else {
+          console.log('offer内容不存在', data)
+        }
       })
     },
     async callOther() {
-      this.$socket.emit('hello', { d: 2 })
       const offer = await this.peer.createOffer({
-        offerToReceiveAudio: 1,
+        offerToReceiveAudio: 0,
         offerToReceiveVideo: 1
       })
       console.log('创建offer信息完成')
-      this.onCreateOffer(offer)
-    },
-    // 生成offer信息
-    async onCreateOffer(desc) {
-      await this.peer.setLocalDescription(desc)
+
+      await this.peer.setLocalDescription(offer)
       console.log('保存offer描述')
       this.$socket.emit('offer', {
         roomId: this.roomId,
         account: this.account,
-        desc
+        offer
       }) // 呼叫端设置本地 offer 描述
     }
   }
@@ -197,27 +231,36 @@ export default {
 <style lang='scss' scoped>
 .main {
   overflow: hidden;
+  .button-wrapper {
+    button {
+      margin: 2%;
+    }
+  }
   .mine {
-    width: 10%;
+    margin: 2%;
     max-width: 200px;
-    min-width: 100px;
-    height: auto;
+    width: 30vw;
+    height: 30vw;
     max-height: 200px;
-    min-height: 100px;
     float: right;
     background: #eee;
     video {
       width: 100%;
+      height: 100%;
     }
   }
   .others {
-    float: left;
-    .others-video {
-      width: 100px;
-      height: 100px;
-      background: #eee;
-    }
+    display: flex;
+    flex-flow: row wrap;
+    // .othersvideo{
+    //   width: 25vw;
+    //   height: 25vw;
+    //   margin: 4%;
+    //   max-width: 200px;
+    //   max-height: 200px;
+    //   border-radius: 100%;
+    //   background: #eee;
+    // }
   }
-
 }
 </style>
