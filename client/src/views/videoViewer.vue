@@ -15,7 +15,7 @@
           <video ref="mineVideo" class="mine-video" src="" autoplay />
         </div>
         <div class="others" ref="othersBox">
-          <video id="rtcB" src="" autoplay class="othersvideo" ref="videoB"></video>
+          <video id="rtcB" src="" autoplay class="othersvideo" ref="videoB" />
         </div>
       </div>
     </div>
@@ -53,24 +53,16 @@ export default {
   methods: {
     createOthervideo(event) {
       this.streams.push(event.stream)
-      // const video = document.createElement('video')
-      // video.className = 'othersvideo'
-      // video.autoplay = 'autoplay'
-      // video.srcObject = event.stream
-      // const children = this.$refs.othersBox.children
-
-      let video = document.createElement('video');
-          video.controls = true;
-          video.autoplay = 'autoplay';
-          video.srcObject = event.stream;
-          this.$refs.othersBox.appendChild(video)
-
-      // if (children[0]) {
-      //   this.$refs.othersBox.insertBefore(video, children[0])
-      // } else {
-      //   this.$refs.othersBox.appendChild(video)
-      // }
-      this.$refs.videoB.srcObject = event.stream
+      const video = document.createElement('video')
+      video.className = 'othersvideo'
+      video.autoplay = 'autoplay'
+      video.srcObject = event.stream
+      const children = this.$refs.othersBox.children
+      if (children[0]) {
+        this.$refs.othersBox.insertBefore(video, children[0])
+      } else {
+        this.$refs.othersBox.appendChild(video)
+      }
     },
     stopStream() {
       this.isConnecting = false
@@ -121,6 +113,7 @@ export default {
       navigator.mediaDevices.getUserMedia(constraints)
         .then((stream) => {
           this.localstream = stream
+          console.log('本地流', typeof stream)
           const video = this.$refs.mineVideo
           video.srcObject = stream
           video.onloadedmetadata = (e) => {
@@ -170,12 +163,13 @@ export default {
       this.peer.onaddstream = (event) => {
         if (event.stream) {
           this.createOthervideo(event)
+          console.log('收到媒体流', typeof event.stream, event.stream)
+          this.$refs.videoB.srcObject = event.stream
         }
       }
       this.$socket.on('candidate', (data) => {
         if (data.candidate) {
           console.log('收到candidate')
-          console.log('this.peer', this.peer)
           this.peer.addIceCandidate(data.candidate)
         } else {
           console.log('没有candidate', data.candidate)
@@ -252,15 +246,15 @@ export default {
   .others {
     display: flex;
     flex-flow: row wrap;
-    // .othersvideo{
-    //   width: 25vw;
-    //   height: 25vw;
-    //   margin: 4%;
-    //   max-width: 200px;
-    //   max-height: 200px;
-    //   border-radius: 100%;
-    //   background: #eee;
-    // }
+    .othersvideo{
+      width: 25vw;
+      height: 25vw;
+      margin: 4%;
+      max-width: 200px;
+      max-height: 200px;
+      border-radius: 100%;
+      background: #eee;
+    }
   }
 }
 </style>

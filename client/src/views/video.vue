@@ -132,6 +132,7 @@ export default {
       // }
       this.peerB.onaddstream = (event) => {
         const video = this.$refs.videoB
+        console.log('收到媒体流', typeof event.stream, event.stream)
         video.srcObject = event.stream
       }
       this.peerB.onicecandidate = (event) => {
