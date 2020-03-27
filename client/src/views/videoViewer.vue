@@ -14,9 +14,7 @@
         <div class="mine">
           <video ref="mineVideo" class="mine-video" src="" autoplay />
         </div>
-        <div class="others" ref="othersBox">
-          <video id="rtcB" src="" autoplay class="othersvideo" ref="videoB" />
-        </div>
+        <div class="others" ref="othersBox"></div>
       </div>
     </div>
   </div>
@@ -140,8 +138,13 @@ export default {
       console.log('PeerConnection', PeerConnection)
       const iceServer = {
         iceServers: [
+          // {
+          //   url: 'stun:stun.l.google.com:19302'
+          // },
           {
-            url: 'stun:stun.l.google.com:19302'
+            url: "turn:shsg.vip:3478",
+            username: "shsg",
+            credential: "shsg"
           }
         ]
       }
@@ -163,8 +166,7 @@ export default {
       this.peer.onaddstream = (event) => {
         if (event.stream) {
           this.createOthervideo(event)
-          console.log('收到媒体流', typeof event.stream, event.stream)
-          this.$refs.videoB.srcObject = event.stream
+          console.log('收到媒体流', typeof event.stream)
         }
       }
       this.$socket.on('candidate', (data) => {
@@ -246,7 +248,8 @@ export default {
   .others {
     display: flex;
     flex-flow: row wrap;
-    .othersvideo{
+    video {
+      object-fit: cover;
       width: 25vw;
       height: 25vw;
       margin: 4%;
