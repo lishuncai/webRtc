@@ -7,14 +7,14 @@
           <mu-button @click="getUserMediaStream" :disabled="isConnecting">
             开始录像
           </mu-button>
-          <mu-button @click="createCannel">初始化连接</mu-button>
-          <mu-button @click="stopStream">关闭通话</mu-button>
+          <mu-button @click="stopStream">关闭录像</mu-button>
         </div>
 
         <div class="mine">
           <video ref="mineVideo" class="mine-video" src="" autoplay />
         </div>
-        <div class="others" ref="othersBox"></div>
+        <div class="others" ref="othersBox">
+        </div>
       </div>
     </div>
   </div>
@@ -40,26 +40,106 @@ export default {
       answer: null,
       answerOther: null,
       candidate: null,
-      isConnecting: false
+      isConnecting: false,
+      peerList: []
     }
+  },
+  mounted () {
+    this.init()
   },
   computed: {
     isAlive() {
       return this.$store.state.socketALive
     }
   },
+  beforeDestroy() {
+    for (const k in this.peerList) {
+      this.peerList[k].close()
+      this.peerList[k] = null
+    }
+  },
   methods: {
-    createOthervideo(event) {
-      this.streams.push(event.stream)
+    // 初始化 rconnection
+    init() {
+      this.peer = this.createPeer(this.account)
+      this.peerList[this.account] = this.peer
+      this.pussSdp(this.account, this.peer)
+      this.$socket.on('joined', (data) => {
+        this.onJoined(data.list, data.account)
+      })
+      this.$socket.on('candidate', (data) => {
+        if (data.candidate) {
+          console.log('收到candidate')
+          const peer = this.peerList[data.account]
+          peer && peer.addIceCandidate(data.candidate)
+        } else {
+          console.log('没有candidate', data.candidate)
+        }
+      })
+      this.$socket.on('answer', (data) => {
+        if (data.answer) {
+          console.log('收到answer')
+          this.answerOther = data
+          const peer = this.peerList[data.account]
+          peer && peer.setRemoteDescription(data.answer)
+        } else {
+          console.log('没有answer内容', data)
+        }
+      })
+      this.$socket.on('offer', async (data) => {
+        if (data.offer) {
+          console.log('搜到offer')
+          const peer = this.peerList[data.account]
+          if (peer) {
+            await peer.setRemoteDescription(data.offer)
+            const answer = await peer.createAnswer()
+            this.answer = answer
+            await peer.setLocalDescription(answer)
+
+            this.$socket.emit('answer', {
+              roomId: this.roomId,
+              account: this.account,
+              answer: peer.localDescription
+            })
+            console.log('推送answer', typeof peer.localDescription)
+          }
+        } else {
+          console.log('offer内容不存在', data)
+        }
+      })
+    },
+    onJoined(list, account) {
+      if (Array.isArray(list) && list.length > 0) {
+        list.map(account => {
+          if (!this.peerList[account] && !account === this.account) {
+            this.peerList[account] = this.createPeer(account)
+          }
+        })
+        if (account === this.account) {
+          // console.log('account', account);
+          for (const k in this.peerList) {
+            this.pussSdp(k, this.peerList[k])
+          }
+        }
+      }
+    },
+    createOthervideo(event, v) {
+      const videoWrapper = document.createElement('div')
+      const text = document.createElement('span')
+      text.className = 'username'
+      text.textContent = v
+      videoWrapper.className = 'room-video-wrapper'
       const video = document.createElement('video')
-      video.className = 'othersvideo'
+      video.className = 'room-joins-video'
       video.autoplay = 'autoplay'
       video.srcObject = event.stream
+      videoWrapper.appendChild(video)
+      videoWrapper.appendChild(text)
       const children = this.$refs.othersBox.children
       if (children[0]) {
-        this.$refs.othersBox.insertBefore(video, children[0])
+        this.$refs.othersBox.insertBefore(videoWrapper, children[0])
       } else {
-        this.$refs.othersBox.appendChild(video)
+        this.$refs.othersBox.appendChild(videoWrapper)
       }
     },
     stopStream() {
@@ -81,7 +161,7 @@ export default {
     getUserMediaStream() {
       const constraints = {
         video: {
-          facingMode: 'user'
+          facingMode: 'user' // 设置前/后摄像头
         },
         audio: true
       }
@@ -111,30 +191,26 @@ export default {
       navigator.mediaDevices.getUserMedia(constraints)
         .then((stream) => {
           this.localstream = stream
+          if (this.peer) {
+            this.peer.addStream(stream)
+          }
           console.log('本地流', typeof stream)
           const video = this.$refs.mineVideo
           video.srcObject = stream
           video.onloadedmetadata = (e) => {
             console.log('可以播放了')
             this.isConnecting = true
-            video.play()
-            this.createCannel()
           }
         })
         .catch((err) => {
           console.error(err)
         })
     },
-    createCannel() {
-      this.initPeer()
-      this.callOther()
-    },
-    // 初始化 RTCPeerConnection
-    initPeer() {
+
+    createPeer(v) {
       const PeerConnection = window.RTCPeerConnection ||
         window.mozRTCPeerConnection ||
         window.webkitRTCPeerConnection
-
       console.log('PeerConnection', PeerConnection)
       const iceServer = {
         iceServers: [
@@ -142,88 +218,69 @@ export default {
           //   url: 'stun:stun.l.google.com:19302'
           // },
           {
-            url: "turn:shsg.vip:3478",
-            username: "shsg",
-            credential: "shsg"
+            url: 'turn:shsg.vip:3478',
+            username: 'shsg',
+            credential: 'shsg'
           }
         ]
       }
-      this.peer = new PeerConnection(iceServer)
-      console.log('this.peer', this.peer)
-      if (this.localstream) {
-        this.peer.addStream(this.localstream)
-      }
-      this.peer.onicecandidate = (event) => {
+      const peer = new PeerConnection(iceServer)
+      peer.onicecandidate = (event) => {
         if (event.candidate) {
           this.$socket.emit('candidate', {
             roomId: this.roomId,
+            account: this.account,
             candidate: event.candidate
           })
         } else {
           console.log('没有获取到候选信息')
         }
       }
-      this.peer.onaddstream = (event) => {
+      peer.onaddstream = (event) => {
         if (event.stream) {
-          this.createOthervideo(event)
+          this.createOthervideo(event, v)
           console.log('收到媒体流', typeof event.stream)
         }
       }
-      this.$socket.on('candidate', (data) => {
-        if (data.candidate) {
-          console.log('收到candidate')
-          this.peer.addIceCandidate(data.candidate)
-        } else {
-          console.log('没有candidate', data.candidate)
-        }
-      })
-      this.$socket.on('answer', (data) => {
-        if (data.answer) {
-          console.log('收到answer')
-          this.answerOther = data
-          this.peer.setRemoteDescription(data.answer)
-        } else {
-          console.log('没有answer内容', data)
-        }
-      })
-      this.$socket.on('offer', async (data) => {
-        if (data.offer) {
-          console.log('搜到offer')
-          await this.peer.setRemoteDescription(data.offer)
-          const answer = await this.peer.createAnswer()
-          this.answer = answer
-          await this.peer.setLocalDescription(answer)
-
-          this.$socket.emit('answer', {
-            roomId: this.roomId,
-            account: this.account,
-            answer: this.peer.localDescription
-          })
-          console.log('推送answer')
-        } else {
-          console.log('offer内容不存在', data)
-        }
-      })
+      return peer
     },
-    async callOther() {
-      const offer = await this.peer.createOffer({
+
+    async pussSdp(account, peer) {
+      const offer = await peer.createOffer({
         offerToReceiveAudio: 0,
         offerToReceiveVideo: 1
       })
       console.log('创建offer信息完成')
 
-      await this.peer.setLocalDescription(offer)
+      await peer.setLocalDescription(offer)
       console.log('保存offer描述')
       this.$socket.emit('offer', {
         roomId: this.roomId,
-        account: this.account,
+        account,
         offer
       }) // 呼叫端设置本地 offer 描述
     }
   }
 }
 </script>
-
+<style>
+.room-video-wrapper {
+  text-align: center;
+}
+.room-video-wrapper .username {
+  line-height: 26px;
+}
+.room-joins-video {
+  object-fit: cover;
+  width: 25vw;
+  height: 25vw;
+  margin: 4%;
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 100%;
+  background: #eee;
+}
+</style>
 <style lang='scss' scoped>
 .main {
   overflow: hidden;
@@ -248,16 +305,6 @@ export default {
   .others {
     display: flex;
     flex-flow: row wrap;
-    video {
-      object-fit: cover;
-      width: 25vw;
-      height: 25vw;
-      margin: 4%;
-      max-width: 200px;
-      max-height: 200px;
-      border-radius: 100%;
-      background: #eee;
-    }
   }
 }
 </style>

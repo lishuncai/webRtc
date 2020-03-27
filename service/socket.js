@@ -4,6 +4,13 @@ const io = require('socket.io')(server);
 server.listen(3001, '0.0.0.0')
 let baseId = 1000
 
+/**
+ * {
+      creater: account,
+      roomId: roomId,
+      joins: new Set()
+    }
+ */
 const roomInfos = new Map()
 const offers = [
   // {
@@ -46,20 +53,19 @@ io.on('connection', function (socket) {
       fn('找不到房间')
     }
   })
-  socket.emit('news', { hello: 'world' });
-  socket.on('hello', function (id, data) {
-    console.log('hello', data);
-  });
+  socket.emit('news', 'socket已连接');
   socket.on('join', function(data, fn) {
     const {roomId, account} = data
     const room = roomInfos.get(roomId)
     console.log('根据id查询room',typeof data.roomId, data.roomId, room)
     if (room && account) {
       if (!room.joins.has(account)){
-        room.joins.add(account)
         fn(null)
+        room.joins.add(account)
         socket.join(roomId)
-        io.to(roomId).emit('joned', `新人${account}加入`)
+        let joinsList = room.joins
+        io.to(roomId).emit('joined', joinsList, account)
+        io.to(roomId).emit('roomMessage', `新人${account}加入`)
       } else {
         fn(null)
       }

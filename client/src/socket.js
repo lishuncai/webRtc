@@ -15,6 +15,6 @@ socket.on('disconnect', function() {
   store.commit('setAlive', false)
 })
 socket.on('news', function (data) {
-  socket.emit('hello', 'helloworld')
+  Toast.info(data)
 })
 export default socket

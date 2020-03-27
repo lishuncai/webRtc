@@ -43,15 +43,9 @@ export default {
   },
   methods: {
     initSocket() {
-      this.$socket.on('joned', (data) => {
+      this.$socket.on('roomMessage', (msg) => {
         const newNode = document.createElement('div')
-        newNode.innerHTML = `<span>${data}</span>`
-        const children = this.$refs.noteWrapper.children
-        this.$refs.noteWrapper.insertBefore(newNode, children[0])
-      })
-      this.$socket.on('level', (data) => {
-        const newNode = document.createElement('div')
-        newNode.innerHTML = `<span>${data}</span>`
+        newNode.innerHTML = `<span>${msg}</span>`
         const children = this.$refs.noteWrapper.children
         this.$refs.noteWrapper.insertBefore(newNode, children[0])
       })
