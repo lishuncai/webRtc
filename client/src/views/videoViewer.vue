@@ -1,20 +1,20 @@
 <template>
   <div>
     <div>
-      版本：1.0.9
+      {{account}}
       <div class="main">
         <div class="button-wrapper">
           <mu-button @click="getUserMediaStream" :disabled="isConnecting">
             开始录像
           </mu-button>
-          <mu-button @click="stopStream">关闭录像</mu-button>
+          <mu-button @click="stopStream" :disabled="!isConnecting">关闭录像</mu-button>
+          <mu-button @click="onPussSdpHandler">拉取对方录像</mu-button>
         </div>
 
         <div class="mine">
           <video ref="mineVideo" class="mine-video" src="" autoplay />
         </div>
-        <div class="others" ref="othersBox">
-        </div>
+        <div class="others" ref="othersBox"></div>
       </div>
     </div>
   </div>
@@ -24,7 +24,7 @@
 export default {
   props: {
     roomId: null,
-    account: null,
+    creater: null,
     isCreater: {
       type: Boolean,
       default: false
@@ -41,21 +41,35 @@ export default {
       answerOther: null,
       candidate: null,
       isConnecting: false,
-      peerList: []
+      peerList: {},
+      targetUser: null
     }
   },
   mounted () {
+    const path = `/room/${this.roomId}`
+    this.socket = this.$io.getSocketSpace(path)
     this.init()
+    this.emitJoin()
   },
   computed: {
     isAlive() {
       return this.$store.state.socketALive
+    },
+    account() {
+      return this.$store.getters.account
     }
   },
   beforeDestroy() {
+    if (this.localstream) {
+      this.localstream.getTracks().forEach(track => {
+        track.stop()
+      })
+    }
+    this.stopStream()
     for (const k in this.peerList) {
       this.peerList[k].close()
       this.peerList[k] = null
+      delete this.peerList[k]
     }
   },
   methods: {
@@ -63,64 +77,122 @@ export default {
     init() {
       this.peer = this.createPeer(this.account)
       this.peerList[this.account] = this.peer
-      this.pussSdp(this.account, this.peer)
-      this.$socket.on('joined', (data) => {
+      this.socket.on('joined', (data) => {
+        console.log('onjoined', data)
         this.onJoined(data.list, data.account)
       })
-      this.$socket.on('candidate', (data) => {
+      this.socket.on('leave', (data) => {
+        if (data) {
+          this.peerList[data] = null
+          delete this.peerList[data]
+          this.removeVideoBox(data)
+        }
+      })
+      this.socket.on('candidate', (data) => {
+        if (data.target !== this.account) return
+        console.log('candidate', data, this)
         if (data.candidate) {
           console.log('收到candidate')
-          const peer = this.peerList[data.account]
-          peer && peer.addIceCandidate(data.candidate)
+          const peer = this.peerList[data.sender]
+          const candidate = new RTCIceCandidate(data.candidate)
+          peer.addIceCandidate(candidate)
+          .then(() => {
+            console.log('设置candate成功')
+          })
+          .catch(err => {
+            console.error(err)
+          })
         } else {
           console.log('没有candidate', data.candidate)
         }
       })
-      this.$socket.on('answer', (data) => {
+      this.socket.on('answer', (data) => {
+        if (data.target !== this.account) return
+        console.log('answer', data)
         if (data.answer) {
           console.log('收到answer')
-          this.answerOther = data
-          const peer = this.peerList[data.account]
-          peer && peer.setRemoteDescription(data.answer)
+          const peer = this.peerList[data.sender]
+          const desc = new RTCSessionDescription(data.answer)
+          peer.setRemoteDescription(desc)
         } else {
           console.log('没有answer内容', data)
         }
       })
-      this.$socket.on('offer', async (data) => {
+      this.socket.on('offer', async (data) => {
+        if (data.target !== this.account) return
         if (data.offer) {
           console.log('搜到offer')
-          const peer = this.peerList[data.account]
+          const peer = this.peerList[data.sender]
           if (peer) {
-            await peer.setRemoteDescription(data.offer)
-            const answer = await peer.createAnswer()
-            this.answer = answer
-            await peer.setLocalDescription(answer)
-
-            this.$socket.emit('answer', {
-              roomId: this.roomId,
-              account: this.account,
-              answer: peer.localDescription
+            const desc = new RTCSessionDescription(data.offer)
+            peer.setRemoteDescription(desc)
+            .then(() => {
+              return this.localstream || this.getUserMediaStream()
             })
-            console.log('推送answer', typeof peer.localDescription)
+            .then(() => {
+              if (this.localstream) {
+                // 此行取代addStream()
+                this.localstream.getTracks().forEach(track => peer.addTrack(track, this.localstream))
+              }
+              return peer.createAnswer()
+            }, (err) => {
+              // 打开录像失败或不被允许
+              console.log('未授权录像')
+              console.error(err)
+            })
+            .then((answer) => {
+              return peer.setLocalDescription(answer)
+            })
+            .then(() => {
+              this.socket.emit('answer', {
+                roomId: data.roomId,
+                sender: this.account,
+                target: data.sender,
+                answer: peer.localDescription
+              })
+            })
+            .catch(err => {
+              console.error(err)
+            })
+          } else {
+            console.log('没有peer对象', this.peerList, data.account)
           }
         } else {
           console.log('offer内容不存在', data)
         }
       })
     },
+    emitJoin() {
+      this.socket.emit('join', {
+        account: this.account,
+        roomId: this.roomId
+      }, (err) => {
+        if (!err) {
+
+        } else {
+          this.$toast.warning(err)
+        }
+      })
+    },
+    onPussSdpHandler() {
+      Object.keys(this.peerList).map(name => {
+        if (name !== this.account) {
+          const state = this.peerList[name].connectionState
+          // peer状态详见MDN https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
+          if (['connecting', 'connected', 'closed'].indexOf(state) > -1) {
+            return
+          }
+          this.pussSdp(name, this.peerList[name])
+        }
+      })
+    },
     onJoined(list, account) {
-      if (Array.isArray(list) && list.length > 0) {
-        list.map(account => {
-          if (!this.peerList[account] && !account === this.account) {
-            this.peerList[account] = this.createPeer(account)
+      if (Array.isArray(list) && list.length > 1) {
+        list.map(name => {
+          if (!this.peerList[name] && name !== this.account) {
+            this.peerList[name] = this.createPeer(name)
           }
         })
-        if (account === this.account) {
-          // console.log('account', account);
-          for (const k in this.peerList) {
-            this.pussSdp(k, this.peerList[k])
-          }
-        }
       }
     },
     createOthervideo(event, v) {
@@ -130,8 +202,10 @@ export default {
       text.textContent = v
       videoWrapper.className = 'room-video-wrapper'
       const video = document.createElement('video')
+      video.id = 'v-' + v
       video.className = 'room-joins-video'
       video.autoplay = 'autoplay'
+      video.playsinline = 'true'
       video.srcObject = event.stream
       videoWrapper.appendChild(video)
       videoWrapper.appendChild(text)
@@ -142,20 +216,20 @@ export default {
         this.$refs.othersBox.appendChild(videoWrapper)
       }
     },
+    removeVideoBox(v) {
+      const node = document.querySelector('v-' + v)
+      node && node.remove()
+    },
     stopStream() {
       this.isConnecting = false
-      if (!this.localstream) {
-        this.$toast.warning('当前无录像')
-        return
+      if (this.peer) {
+        this.peer.close()
+        this.peer = null
       }
       this.localstream.getTracks().forEach(track => {
         track.stop()
       })
-      this.streams.map(stream => {
-        stream.getTracks().map(track => {
-          track.stop()
-        })
-      })
+      this.localstream = null
     },
     // 获取本地媒体流
     getUserMediaStream() {
@@ -188,12 +262,9 @@ export default {
         }
       }
 
-      navigator.mediaDevices.getUserMedia(constraints)
+      return navigator.mediaDevices.getUserMedia(constraints)
         .then((stream) => {
           this.localstream = stream
-          if (this.peer) {
-            this.peer.addStream(stream)
-          }
           console.log('本地流', typeof stream)
           const video = this.$refs.mineVideo
           video.srcObject = stream
@@ -214,50 +285,62 @@ export default {
       console.log('PeerConnection', PeerConnection)
       const iceServer = {
         iceServers: [
-          // {
-          //   url: 'stun:stun.l.google.com:19302'
-          // },
           {
-            url: 'turn:shsg.vip:3478',
+            urls: 'turn:shsg.vip:3478',
             username: 'shsg',
             credential: 'shsg'
           }
+          // {
+          //   urls: 'stun:stun.stunprotocol.org'
+          // }
+          // {
+          //   urls: 'stun:stun.l.google.com:19302'
+          // }
         ]
       }
       const peer = new PeerConnection(iceServer)
       peer.onicecandidate = (event) => {
         if (event.candidate) {
-          this.$socket.emit('candidate', {
+          this.socket.emit('candidate', {
             roomId: this.roomId,
-            account: this.account,
+            sender: this.account,
+            target: v,
             candidate: event.candidate
           })
         } else {
-          console.log('没有获取到候选信息')
+          // console.log('没有获取到候选信息')
         }
       }
       peer.onaddstream = (event) => {
         if (event.stream) {
-          this.createOthervideo(event, v)
+          const video = document.querySelector('#v-' + v)
+          if (video) {
+            video.srcObject = event.stream
+          } else {
+            this.createOthervideo(event, v)
+          }
           console.log('收到媒体流', typeof event.stream)
         }
       }
       return peer
     },
-
-    async pussSdp(account, peer) {
+    // 发送sdp消息
+    async pussSdp(target, peer) {
+      if (this.localstream) {
+        this.localstream.getTracks().forEach(track => peer.addTrack(track, this.localstream))
+      }
       const offer = await peer.createOffer({
-        offerToReceiveAudio: 0,
+        offerToReceiveAudio: 1,
         offerToReceiveVideo: 1
       })
       console.log('创建offer信息完成')
-
       await peer.setLocalDescription(offer)
       console.log('保存offer描述')
-      this.$socket.emit('offer', {
+      this.socket.emit('offer', {
         roomId: this.roomId,
-        account,
-        offer
+        sender: this.account,
+        target: target,
+        offer: peer.localDescription
       }) // 呼叫端设置本地 offer 描述
     }
   }
@@ -269,6 +352,8 @@ export default {
 }
 .room-video-wrapper .username {
   line-height: 26px;
+  font-size: 12px;
+  word-break: keep-all;
 }
 .room-joins-video {
   object-fit: cover;
@@ -298,6 +383,7 @@ export default {
     float: right;
     background: #eee;
     video {
+      object-fit: cover;
       width: 100%;
       height: 100%;
     }

@@ -122,7 +122,7 @@ export default {
         }
       }
       // 如果检测到媒体流连接到本地，将其绑定到一个video标签上输出
-      // this.peerB.onaddstream = (event) => {
+      // this.peerB.ontrack = (event) => {
       //   const video = this.$refs.videoB
       //   video.srcObject = event.stream
       //   video.onloadedmetadata = (e) => {
@@ -130,7 +130,7 @@ export default {
       //     video.play()
       //   }
       // }
-      this.peerB.onaddstream = (event) => {
+      this.peerB.ontrack = (event) => {
         const video = this.$refs.videoB
         console.log('收到媒体流', typeof event.stream, event.stream)
         video.srcObject = event.stream

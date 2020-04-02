@@ -12,38 +12,49 @@ let baseId = 1000
     }
  */
 const roomInfos = new Map()
-const offers = [
-  // {
-  //   account,
-  //   detail
-  // }
-]
-const answers = [
-  // {
-  //   account,
-  //   detail
-  // }
-]
-const candidates = [
-  // {
-  //   account,
-  //   detail
-  // }
-]
+const socketIdMap = new Map()
 
 io.on('connection', function (socket) {
   socket.on('createRoom', function(account, fn) {
     let roomId = String(baseId++)
-    let detail = createRoom({
+    let detail = {
       creater: account,
       roomId: roomId,
+      desc: '',
       joins: new Set()
-    })
+    }
     roomInfos.set(roomId, detail)
     console.log([...roomInfos])
     socket.join(roomId)
+    const nsp = io.of(`/room/${roomId}`)
     fn(detail)
+    nsp.on('connection', function(sock) {
+      createRoom(sock, nsp)
+    })
   })
+  socket.on('enterRoom', function({roomId, account}, fn){
+    socketIdMap.set(socket.id, account)
+    const room = roomInfos.get(roomId)
+    if (room) {
+      fn()
+    } else {
+      fn('房间不存在')
+    }
+  })
+  socket.on('disconnect', function () { // 这里监听 disconnect，就可以知道谁断开连接了
+    if (socketIdMap.has(socket.id)) {
+      const account = socketIdMap.get(socket.id)
+      console.log(account, '断开连接')
+      socket.emit('leave', account)
+    }
+  })
+});
+
+io.on('disconnection', function() {
+  console.log('连接中断')
+  console.log('当前房间剩余', roomInfos.size, roomInfos)
+})
+function createRoom(socket, nsp) {
   socket.on('getRoomInfo', function(roomId, fn) {
     let result = roomInfos.get(roomId)
     console.log('roomInfos:', [...roomInfos], '\n', 'roomId:result',roomId, result)
@@ -59,63 +70,52 @@ io.on('connection', function (socket) {
     const room = roomInfos.get(roomId)
     console.log('根据id查询room',typeof data.roomId, data.roomId, room)
     if (room && account) {
-      if (!room.joins.has(account)){
-        fn(null)
-        room.joins.add(account)
-        socket.join(roomId)
-        let joinsList = room.joins
-        io.to(roomId).emit('joined', joinsList, account)
-        io.to(roomId).emit('roomMessage', `新人${account}加入`)
-      } else {
-        fn(null)
-      }
+      fn(null)
+      room.joins.add(account)
+      socket.join(roomId)
+      let joinsList = [...room.joins]
+      nsp.emit('joined', {
+        list: joinsList,
+        account
+      })
+      nsp.emit('roomMessage', `${account}加入了房间`)
     } else {
       fn('房间不存在')
     }
+  })
+  // 聊天
+  socket.on('chat', function(data) {
+    nsp.emit('roomMessage', data)
   })
   socket.on('leave', function(data){
     let {roomId, account} = data
     let room = roomInfos.get(roomId)
     if (room) {
       room.joins.delete(account)
-      io.to(roomId).emit('level', `${account}离开了房间`)
+      socket.broadcast.emit('roomMessage', `${account}离开了房间`)
       if (room.joins.size === 0) {
         roomInfos.delete(roomId)
         console.log(`房间${roomId}已解散`, '剩余', roomInfos.size)
         socket.leave(roomId)
+        nsp.close && nsp.close()
+      } else {
+        socket.broadcast.emit('leave', account)
       }
     }
   })
   socket.on('offer', function(data) {
     console.log('收到offer', data)
-    offers.push(data)
-    socket.broadcast.to(data.roomId).emit('offer', data)
+    socket.broadcast.emit('offer', data)
     console.log('推送offer')
   })
   socket.on('answer', function(data) {
     console.log('收到answer', data)
-    answers.push(data)
-    socket.broadcast.to(data.roomId).emit('answer', data)
+    socket.broadcast.emit('answer', data)
     console.log('推送answer')
   })
   socket.on('candidate', function(data) {
     console.log('收到candidate', data)
-    candidates.push(data)
-    socket.broadcast.to(data.roomId).emit('candidate', data)
+    socket.broadcast.emit('candidate', data)
     console.log('推送candidate')
   })
-});
-
-io.on('disconnection', function() {
-  console.log('连接中断')
-  console.log('当前房间剩余', roomInfos.size, roomInfos)
-})
-
-function createRoom({creater, roomId, desc='', joins}) {
-  return {
-    creater,
-    roomId,
-    desc,
-    joins
-  }
 }

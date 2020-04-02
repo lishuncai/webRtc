@@ -100,7 +100,7 @@ export default {
         this.$toast.warning('请求失败，socket未连接上')
         return
       }
-      this.$socket.emit('createRoom', this.account, (data) => {
+      this.$io.socket.emit('createRoom', this.account, (data) => {
         if (data) {
           this.roomId = data.roomId
           this.joinRoomId = data.roomId
@@ -112,16 +112,16 @@ export default {
       })
     },
     intoRoom() {
-      this.$socket.emit('join', {
-        account: this.account,
-        roomId: this.joinRoomId
+      this.$io.socket.emit('enterRoom', {
+        roomId: this.joinRoomId,
+        account: this.account
       }, (err) => {
         if (!err) {
           this.$router.push({
             path: `/Room/${this.joinRoomId}`
           })
         } else {
-          this.$toast.warning(err)
+          this.$toast.error(err)
         }
       })
     }
