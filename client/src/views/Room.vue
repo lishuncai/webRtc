@@ -1,15 +1,18 @@
 <template>
   <div>
-    <p>
-      房主：{{creater}} / 房号： {{roomId}}
-    </p>
+    <p>房主：{{ creater }} / 房号： {{ roomId }}</p>
     <div class="note-wrapper">
       <div ref="noteWrapper"></div>
       <div class="input-box">
-        <input type="text" v-model="chatMssage" @keyup.enter="sendMsg">
+        <input type="text" v-model="chatMssage" @keyup.enter="sendMsg" />
       </div>
     </div>
-    <video-viewer :roomId="roomId" :creater="creater" :isCreater="isCreater"></video-viewer>
+    <video-viewer
+      v-if="account"
+      :roomId="roomId"
+      :creater="creater"
+      :isCreater="isCreater"
+    ></video-viewer>
   </div>
 </template>
 
@@ -29,14 +32,21 @@ export default {
   components: {
     videoViewer
   },
-  beforeDestroy () {
+  beforeDestroy() {
     this.socket.close()
   },
-  beforeRouteLeave (to, from, next) {
-    this.levelRoom()
+  beforeRouteLeave(to, from, next) {
+    if (from.name === 'room') {
+      this.levelRoom()
+    }
     next()
   },
-  created () {
+  created() {
+    if (!this.account) {
+      this.$router.push({
+        path: '/meeting'
+      })
+    }
     const params = this.$route.params
     this.roomId = params.roomId
     if (this.roomId) {
@@ -72,10 +82,12 @@ export default {
       }
     },
     levelRoom() {
-      this.socket.emit('leave', {
-        roomId: this.roomId,
-        account: this.account
-      })
+      if (this.socket) {
+        this.socket.emit('leave', {
+          roomId: this.roomId,
+          account: this.account
+        })
+      }
     },
     getRoomInfo() {
       return new Promise((resolve, reject) => {
@@ -100,26 +112,26 @@ export default {
 </script>
 
 <style lang='scss' scoped>
-  .note-wrapper {
-    position: fixed;
-    padding-left: 5px;
-    overflow-y: auto;
-    right: 0;
-    bottom: 10px;
-    width: 200px;
-    height: 200px;
-    border: 1px dashed #aaa;
-    opacity: 0.56;
-    z-index: 10;
-    text-align: left;
-    .input-box {
-      position: absolute;
-      bottom: 0;
-      left: 0;
+.note-wrapper {
+  position: fixed;
+  padding-left: 5px;
+  overflow-y: auto;
+  right: 0;
+  bottom: 10px;
+  width: 200px;
+  height: 200px;
+  border: 1px dashed #aaa;
+  opacity: 0.56;
+  z-index: 10;
+  text-align: left;
+  .input-box {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    input {
       width: 100%;
-      input {
-        width: 100%;
-      }
     }
   }
+}
 </style>

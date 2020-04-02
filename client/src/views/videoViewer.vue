@@ -5,16 +5,25 @@
       <div class="main">
         <div class="button-wrapper">
           <mu-button @click="getUserMediaStream" :disabled="isConnecting">
-            开始录像
+            打开录像
           </mu-button>
-          <mu-button @click="stopStream" :disabled="!isConnecting">关闭录像</mu-button>
-          <mu-button @click="onPussSdpHandler">拉取对方录像</mu-button>
+          <mu-button @click="onPussSdpHandler">开始通话</mu-button>
+          <mu-button @click="toggleStreamHandler('video')">{{openVideo?'关闭录像':'打开录像'}}</mu-button>
+          <mu-button @click="toggleStreamHandler('audio')">{{openAudio?'关闭录音':'打开录音'}}</mu-button>
+          <mu-button @click="exitRoom">退出房间</mu-button>
+
         </div>
 
         <div class="mine">
           <video ref="mineVideo" class="mine-video" src="" autoplay />
         </div>
-        <div class="others" ref="othersBox"></div>
+        <div class="others" ref="othersBox">
+          <div class="stream-box" v-for="(item, index) in streams" :key="index">
+            <audio v-if="item.audio" :src-object.prop.camel="item.audio"></audio>
+            <video class="stream-video" :src-object.prop.camel="item.video" autoplay playsinline></video>
+            <p class="username">{{item.v}}</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -42,14 +51,18 @@ export default {
       candidate: null,
       isConnecting: false,
       peerList: {},
-      targetUser: null
+      targetUser: null,
+      openVideo: true,
+      openAudio: true
     }
   },
   mounted () {
     const path = `/room/${this.roomId}`
     this.socket = this.$io.getSocketSpace(path)
-    this.init()
-    this.emitJoin()
+    this.initSocket()
+    if (this.account) {
+      this.emitJoin()
+    }
   },
   computed: {
     isAlive() {
@@ -74,7 +87,7 @@ export default {
   },
   methods: {
     // 初始化 rconnection
-    init() {
+    initSocket() {
       this.peer = this.createPeer(this.account)
       this.peerList[this.account] = this.peer
       this.socket.on('joined', (data) => {
@@ -161,6 +174,33 @@ export default {
           console.log('offer内容不存在', data)
         }
       })
+      // 对方关闭了录像
+      this.socket.on('video_enabled', (data) => {
+        if (data.sender) {
+          const streamObj = this.streams.find(item => item.v === data.sender)
+          if (streamObj.video) {
+            streamObj.video.forEach(track => {
+              track.enabled = data.enabled
+            })
+          }
+        }
+      })
+      // 对方关闭了录音
+      this.socket.on('audio_enabled', (data) => {
+        if (data.sender) {
+          const streamObj = this.streams.find(item => item.v === data.sender)
+          if (streamObj.audio) {
+            streamObj.audio.forEach(track => {
+              track.enabled = data.enabled
+            })
+          }
+        }
+      })
+    },
+    exitRoom() {
+      this.$router.push({
+        path: '/meeting'
+      })
     },
     emitJoin() {
       this.socket.emit('join', {
@@ -178,10 +218,11 @@ export default {
       Object.keys(this.peerList).map(name => {
         if (name !== this.account) {
           const state = this.peerList[name].connectionState
+          console.log('peer 连接状态', state)
           // peer状态详见MDN https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
-          if (['connecting', 'connected', 'closed'].indexOf(state) > -1) {
-            return
-          }
+          // if (['connecting', 'connected', 'closed'].indexOf(state) > -1) {
+          //   return
+          // }
           this.pussSdp(name, this.peerList[name])
         }
       })
@@ -195,30 +236,36 @@ export default {
         })
       }
     },
-    createOthervideo(event, v) {
-      const videoWrapper = document.createElement('div')
-      const text = document.createElement('span')
-      text.className = 'username'
-      text.textContent = v
-      videoWrapper.className = 'room-video-wrapper'
-      const video = document.createElement('video')
-      video.id = 'v-' + v
-      video.className = 'room-joins-video'
-      video.autoplay = 'autoplay'
-      video.playsinline = 'true'
-      video.srcObject = event.stream
-      videoWrapper.appendChild(video)
-      videoWrapper.appendChild(text)
-      const children = this.$refs.othersBox.children
-      if (children[0]) {
-        this.$refs.othersBox.insertBefore(videoWrapper, children[0])
+    /**
+     * {String} v 用户名
+     * {MediaStream} stream 媒体流
+     * {String} type  媒体流类型： 视频，音频
+     */
+    updateStream(v, stream, type) {
+      console.log('媒体流数据', {
+        v,
+        stream,
+        type
+      })
+     console.log(this.streams)
+      const result = this.streams.find(item => item.v === v)
+      if (result) {
+        result[type] = stream
       } else {
-        this.$refs.othersBox.appendChild(videoWrapper)
+        this.streams.push({
+          v,
+          [type]: stream
+        })
       }
+      console.log('跟新媒体流数组', result, this.streams)
     },
     removeVideoBox(v) {
-      const node = document.querySelector('v-' + v)
-      node && node.remove()
+      console.log('有人离开', v)
+      const index = this.streams.findIndex(item => item.v === v)
+      if (index > -1) {
+        this.streams.splice(index, 1)
+        console.log('移除视频', index, v)
+      }
     },
     stopStream() {
       this.isConnecting = false
@@ -226,10 +273,48 @@ export default {
         this.peer.close()
         this.peer = null
       }
-      this.localstream.getTracks().forEach(track => {
-        track.stop()
+      if (this.localstream) {
+        this.localstream.getTracks().forEach(track => {
+          track.enabled = false
+          track.stop()
+        })
+      }
+    },
+    /**
+     * {String} type track类型
+     * {Boolean} enabled 状态
+     */
+    toggleStreamHandler(type) {
+      let prop = null
+      if (type === 'video') {
+        prop = 'openVideo'
+      } else if (type === 'audio') {
+        prop = 'openAudio'
+      } else {
+        console.error('toggleStreamHandler 发生错误')
+      }
+      const flag = this[prop]
+      this[prop] = !flag
+      this.toggleStream(type, this[prop])
+    },
+    toggleStream(type, enabled) {
+      let message = ''
+      if (type === 'audio') {
+        message = 'audio_enabled'
+      } else if (type === 'video') {
+        message = 'video_enabled'
+      }
+      this.socket.emit(message, {
+        sender: this.account,
+        enabled
       })
-      this.localstream = null
+      if (this.localstream) {
+        this.localstream.getTracks().forEach(track => {
+          if (track.kind === type) {
+            track.enabled = enabled
+          }
+        })
+      }
     },
     // 获取本地媒体流
     getUserMediaStream() {
@@ -286,7 +371,10 @@ export default {
       const iceServer = {
         iceServers: [
           {
-            urls: 'turn:shsg.vip:3478',
+            urls: 'stun:47.106.9.184:3478'
+          },
+          {
+            urls: 'turn:47.106.9.184:3478',
             username: 'shsg',
             credential: 'shsg'
           }
@@ -311,16 +399,13 @@ export default {
           // console.log('没有获取到候选信息')
         }
       }
-      peer.onaddstream = (event) => {
-        if (event.stream) {
-          const video = document.querySelector('#v-' + v)
-          if (video) {
-            video.srcObject = event.stream
-          } else {
-            this.createOthervideo(event, v)
-          }
-          console.log('收到媒体流', typeof event.stream)
-        }
+      peer.ontrack = (event) => {
+        console.log('ontrack', event)
+        const streams = event.streams
+        const streamType = event.track.kind
+        if (!streams || streams.length < 1) return
+        // 区分流体类型
+        this.updateStream(v, streams[0], streamType)
       }
       return peer
     },
@@ -347,19 +432,19 @@ export default {
 }
 </script>
 <style>
-.room-video-wrapper {
+.stream-box {
   text-align: center;
+  padding: 2%;
 }
-.room-video-wrapper .username {
+.stream-box .username {
   line-height: 26px;
   font-size: 12px;
   word-break: keep-all;
 }
-.room-joins-video {
+.stream-video {
   object-fit: cover;
   width: 25vw;
   height: 25vw;
-  margin: 4%;
   max-width: 200px;
   max-height: 200px;
   border-radius: 100%;
@@ -391,6 +476,12 @@ export default {
   .others {
     display: flex;
     flex-flow: row wrap;
+    .stream-box {
+      audio {
+        position: absolute;
+        opacity: 0;
+      }
+    }
   }
 }
 </style>
