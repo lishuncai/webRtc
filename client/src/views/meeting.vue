@@ -20,7 +20,7 @@
       :overlay-close="false"
       :open.sync="showEnterRoomId"
     >
-      <mu-text-field style="width: 100%" v-model="joinRoomId"></mu-text-field>
+      <mu-text-field style="width: 100%" v-model="joinRoomId" @keyup.enter="enterRoom"></mu-text-field>
       <mu-button
         slot="actions"
         flat

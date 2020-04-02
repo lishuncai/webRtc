@@ -33,7 +33,10 @@ io.on('connection', function (socket) {
     })
   })
   socket.on('enterRoom', function({roomId, account}, fn){
-    socketIdMap.set(socket.id, account)
+    socketIdMap.set(socket.id, {
+      roomId,
+      account
+    })
     const room = roomInfos.get(roomId)
     if (room) {
       fn()
@@ -43,9 +46,14 @@ io.on('connection', function (socket) {
   })
   socket.on('disconnect', function () { // 这里监听 disconnect，就可以知道谁断开连接了
     if (socketIdMap.has(socket.id)) {
-      const account = socketIdMap.get(socket.id)
-      console.log(account, '断开连接')
-      socket.emit('leave', account)
+      const info = socketIdMap.get(socket.id)
+      console.log(info, '断开连接')
+      const room = roomInfos.get(info.roomId)
+      if (room && room.joins) {
+        room.joins.delete(info.account)
+      }
+      socket.broadcast.emit('leave', info.account)
+      socketIdMap.delete(socket.id)      
     }
   })
 });

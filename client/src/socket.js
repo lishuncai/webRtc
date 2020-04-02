@@ -2,7 +2,8 @@ import io from 'socket.io-client'
 import store from '@/store'
 import Toast from 'muse-ui-toast'
 const spaceList = {}
-const IP = process.env.NODE_ENV === 'development' ? '127.0.0.1:3001' : location.origin
+const IP = process.env.NODE_ENV === 'development'
+ ? `${location.origin}` : location.origin
 /**
  *
  * @param {String} name /room/124
