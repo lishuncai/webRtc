@@ -103,7 +103,7 @@ function createRoom(socket, nsp) {
       socket.broadcast.emit('roomMessage', `${account}离开了房间`)
       if (room.joins.size === 0) {
         roomInfos.delete(roomId)
-        console.log(`房间${roomId}已解散`, '剩余', roomInfos.size)
+        console.log(`房间${roomId}已解散`, '当前剩余房间', roomInfos.size)
         socket.leave(roomId)
         nsp.close && nsp.close()
       } else {

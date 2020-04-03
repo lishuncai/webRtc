@@ -7,8 +7,8 @@
           <mu-button @click="onPushSdpHandler">开始通话</mu-button>
           <mu-button @click="toggleStreamHandler('video')" :disabled="!openAudio">{{openVideo?'关闭录像':'打开录像'}}</mu-button>
           <mu-button @click="toggleStreamHandler('audio')" :disabled="!openVideo">{{openAudio?'关闭录音':'打开录音'}}</mu-button>
+          <mu-button @click="onChangerCamera">切换摄像头</mu-button>
           <mu-button @click="exitRoom">退出房间</mu-button>
-
         </div>
 
         <div class="mine">
@@ -49,7 +49,8 @@ export default {
       peerList: {},
       targetUser: null,
       openVideo: true,
-      openAudio: true
+      openAudio: true,
+      camera: 'user' // user, environment
     }
   },
   mounted () {
@@ -66,6 +67,14 @@ export default {
     },
     account() {
       return this.$store.getters.account
+    },
+    constraints() {
+      return {
+        video: {
+          facingMode: this.camera === 'user' ? 'user' : { exact: 'environment' }
+        },
+        audio: true
+      }
     }
   },
   beforeDestroy() {
@@ -309,7 +318,7 @@ export default {
         enabled
       })
 
-      // 替换流 ，参考： https://stackoverflow.com/questions/39126347/webrtc-switch-camera
+      // 替换/替换流(可用于前后摄像头切换) ，参考： https://stackoverflow.com/questions/39126347/webrtc-switch-camera
       if (!enabled) {
         this.localstream.getTracks().forEach(track => {
           if (track.kind === type) {
@@ -321,17 +330,8 @@ export default {
         try {
           const stream = await this.getUserMediaStream()
           this.localstream = stream
-          // 向每个peerconnection替换track
-          Object.values(this.peerList).map(peer => {
-            const sender = peer.getSenders().find(function(s) {
-              return (s.track && s.track.kind === type)
-            })
-            sender && stream.getTracks().forEach(track => {
-              if (track.kind === type) {
-                sender.replaceTrack(track)
-              }
-            })
-          })
+          // 切换流
+          this.changeStream(stream, type)
         } catch (err) {
           if (err) {
             console.error(err)
@@ -339,6 +339,22 @@ export default {
         }
       }
     },
+
+    async onChangerCamera() {
+      const flag = this.camera
+      this.camera = (flag === 'user' ? 'environment' : 'user')
+      try {
+        const stream = await this.getUserMediaStream()
+        this.localstream = stream
+        this.changeStream(stream, 'video')
+      } catch (err) {
+        if (err) {
+          console.error(err)
+          this.$toast.error('切换失败')
+        }
+      }
+    },
+
     // 获取本地媒体流
     async getUserMediaStream() {
       // 兼容写法
@@ -363,14 +379,7 @@ export default {
           })
         }
       }
-
-      const constraints = {
-        video: {
-          facingMode: 'user' // 设置前/后摄像头
-        },
-        audio: true
-      }
-      console.log('constraints', constraints)
+      console.log('constraints', this.constraints)
       // 获取设备列表
       // 参考 https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices
       const deviceList = await navigator.mediaDevices.enumerateDevices()
@@ -382,7 +391,7 @@ export default {
       //   }
       // }
 
-      return navigator.mediaDevices.getUserMedia(constraints)
+      return navigator.mediaDevices.getUserMedia(this.constraints)
         .then((stream) => {
           stream.getTracks().forEach(track => {
             if (track.kind === 'audio') {
@@ -396,6 +405,20 @@ export default {
           video.srcObject = stream
           return stream
         })
+    },
+
+    changeStream(stream, type) {
+      // 向每个peerconnection替换track
+      Object.values(this.peerList).map(peer => {
+        const sender = peer.getSenders().find(function(s) {
+          return (s.track && s.track.kind === type)
+        })
+        sender && stream.getTracks().forEach(track => {
+          if (track.kind === type) {
+            sender.replaceTrack(track)
+          }
+        })
+      })
     },
 
     createPeer(v) {
