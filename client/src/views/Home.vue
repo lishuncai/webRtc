@@ -47,12 +47,10 @@ export default {
 </script>
 <style lang="scss" scoped>
 .input-account-wrapper {
-  width: 100%;
+  // width: 100%;
   text-align: center;
   .input-box {
-    width: 80%;
     ::v-deep input {
-      font-size: 26px;
       text-align: center;
     }
   }

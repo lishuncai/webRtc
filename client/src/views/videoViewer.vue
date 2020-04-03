@@ -5,8 +5,8 @@
       <div class="main">
         <div class="button-wrapper">
           <mu-button @click="onPushSdpHandler">开始通话</mu-button>
-          <mu-button @click="toggleStreamHandler('video')">{{openVideo?'关闭录像':'打开录像'}}</mu-button>
-          <mu-button @click="toggleStreamHandler('audio')">{{openAudio?'关闭录音':'打开录音'}}</mu-button>
+          <mu-button @click="toggleStreamHandler('video')" :disabled="!openAudio">{{openVideo?'关闭录像':'打开录像'}}</mu-button>
+          <mu-button @click="toggleStreamHandler('audio')" :disabled="!openVideo">{{openAudio?'关闭录音':'打开录音'}}</mu-button>
           <mu-button @click="exitRoom">退出房间</mu-button>
 
         </div>
@@ -69,11 +69,6 @@ export default {
     }
   },
   beforeDestroy() {
-    if (this.localstream) {
-      this.localstream.getTracks().forEach(track => {
-        track.stop()
-      })
-    }
     this.stopStream()
     for (const k in this.peerList) {
       this.peerList[k].close()
@@ -138,10 +133,11 @@ export default {
             .then(() => {
               return this.localstream || this.getUserMediaStream()
             })
-            .then(() => {
-              if (this.localstream) {
+            .then((stream) => {
+              this.localstream = stream
+              if (stream) {
                 // 此行取代addStream()
-                this.localstream.getTracks().forEach(track => peer.addTrack(track, this.localstream))
+                stream.getTracks().forEach(track => peer.addTrack(track, stream))
               }
               return peer.createAnswer()
             }, (err) => {
@@ -170,26 +166,26 @@ export default {
           console.log('offer内容不存在', data)
         }
       })
-      // 对方关闭了录像
+      // 对方关闭/打开了录像
       this.socket.on('video_enabled', (data) => {
         if (data.sender) {
-          const streamObj = this.streams.find(item => item.v === data.sender)
-          if (streamObj.video) {
-            streamObj.video.forEach(track => {
-              track.enabled = data.enabled
-            })
-          }
+          // const streamObj = this.streams.find(item => item.v === data.sender)
+          // if (streamObj.video) {
+          //   streamObj.video.forEach(track => {
+          //     track.enabled = data.enabled
+          //   })
+          // }
         }
       })
-      // 对方关闭了录音
+      // 对方关闭/打开了录音
       this.socket.on('audio_enabled', (data) => {
         if (data.sender) {
-          const streamObj = this.streams.find(item => item.v === data.sender)
-          if (streamObj.audio) {
-            streamObj.audio.forEach(track => {
-              track.enabled = data.enabled
-            })
-          }
+          // const streamObj = this.streams.find(item => item.v === data.sender)
+          // if (streamObj.audio) {
+          //   streamObj.audio.forEach(track => {
+          //     track.enabled = data.enabled
+          //   })
+          // }
         }
       })
     },
@@ -212,7 +208,8 @@ export default {
     },
     async onPushSdpHandler() {
       try {
-        await this.getUserMediaStream()
+        const stream = await this.getUserMediaStream()
+        this.localstream = stream
       } catch (err) {
         if (err) return
       }
@@ -222,9 +219,9 @@ export default {
           const state = this.peerList[name].connectionState
           console.log('peer 连接状态', state)
           // peer状态详见MDN https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
-          // if (['connecting', 'connected', 'closed'].indexOf(state) > -1) {
-          //   return
-          // }
+          if (['connecting', 'connected'].indexOf(state) > -1) {
+            return
+          }
           this.pushSdp(name, this.peerList[name])
         }
       })
@@ -299,48 +296,51 @@ export default {
       this.toggleStream(type, this[prop])
     },
     async toggleStream(type, enabled) {
+      if (!this.localstream) return
       let message = ''
       if (type === 'audio') {
         message = 'audio_enabled'
       } else if (type === 'video') {
         message = 'video_enabled'
       }
+      console.log('message', message)
       this.socket.emit(message, {
         sender: this.account,
         enabled
       })
+
+      // 替换流 ，参考： https://stackoverflow.com/questions/39126347/webrtc-switch-camera
       if (!enabled) {
-        this.localstream && this.localstream.getTracks().forEach(track => {
+        this.localstream.getTracks().forEach(track => {
           if (track.kind === type) {
-            track.enabled = enabled // 单纯改变录像可渲染状态，不会关闭摄像头
-            track.stop() // 会关闭摄像头
+            track.enabled = false // 单纯改变录像可渲染状态，不会关闭摄像头
+            track.stop()
           }
         })
       } else {
-        let newStream = null
         try {
-          newStream = await this.getUserMediaStream()
-        } catch (err) {
-          if (err) return
-        }
-        Object.values(this.peerList).map(peer => {
-          newStream.getTracks().forEach(track => {
-            if (track.kind === type) {
-              peer.addTrack(track, newStream)
-            }
+          const stream = await this.getUserMediaStream()
+          this.localstream = stream
+          // 向每个peerconnection替换track
+          Object.values(this.peerList).map(peer => {
+            const sender = peer.getSenders().find(function(s) {
+              return (s.track && s.track.kind === type)
+            })
+            sender && stream.getTracks().forEach(track => {
+              if (track.kind === type) {
+                sender.replaceTrack(track)
+              }
+            })
           })
-        })
-        this.localstream = newStream
+        } catch (err) {
+          if (err) {
+            console.error(err)
+          }
+        }
       }
     },
     // 获取本地媒体流
-    getUserMediaStream() {
-      const constraints = {
-        video: {
-          facingMode: 'user' // 设置前/后摄像头
-        },
-        audio: true
-      }
+    async getUserMediaStream() {
       // 兼容写法
       if (navigator.mediaDevices === undefined) {
         navigator.mediaDevices = {}
@@ -364,15 +364,37 @@ export default {
         }
       }
 
+      const constraints = {
+        video: {
+          facingMode: 'user' // 设置前/后摄像头
+        },
+        audio: true
+      }
+      console.log('constraints', constraints)
+      // 获取设备列表
+      // 参考 https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices
+      const deviceList = await navigator.mediaDevices.enumerateDevices()
+      console.log('所有设备列表', JSON.stringify(deviceList))
+      // const audio = deviceList.find(device => device.kind === 'audioinput')
+      // if (audio) {
+      //   constraints.audio = {
+      //     deviceId: audio.id
+      //   }
+      // }
+
       return navigator.mediaDevices.getUserMedia(constraints)
         .then((stream) => {
-          this.localstream = stream
+          stream.getTracks().forEach(track => {
+            if (track.kind === 'audio') {
+              track.enabled = this.openAudio
+            } else if (track.kind === 'video') {
+              track.enabled = this.openVideo
+            }
+          })
           console.log('本地流', typeof stream)
           const video = this.$refs.mineVideo
           video.srcObject = stream
-          video.onloadedmetadata = (e) => {
-            console.log('可以播放了')
-          }
+          return stream
         })
     },
 
@@ -425,7 +447,9 @@ export default {
     // 发送sdp消息
     async pushSdp(target, peer) {
       if (this.localstream) {
-        this.localstream.getTracks().forEach(track => peer.addTrack(track, this.localstream))
+        this.localstream.getTracks().forEach(track => {
+          peer.addTrack(track, this.localstream)
+        })
       }
       const offer = await peer.createOffer({
         offerToReceiveAudio: 1,
