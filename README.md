@@ -6,7 +6,7 @@
  ```
   npm install
  ```
-#### 服务端程序在后台永久执行命令
+#### node服务守护进程
 ```
- nohup npm run start &
+ npm run prd
 ```
