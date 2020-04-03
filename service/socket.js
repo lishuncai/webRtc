@@ -112,18 +112,12 @@ function createRoom(socket, nsp) {
     }
   })
   socket.on('offer', function(data) {
-    console.log('收到offer', data)
     socket.broadcast.emit('offer', data)
-    console.log('推送offer')
   })
   socket.on('answer', function(data) {
-    console.log('收到answer', data)
     socket.broadcast.emit('answer', data)
-    console.log('推送answer')
   })
   socket.on('candidate', function(data) {
-    console.log('收到candidate', data)
     socket.broadcast.emit('candidate', data)
-    console.log('推送candidate')
   })
 }

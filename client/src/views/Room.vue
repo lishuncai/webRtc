@@ -118,11 +118,13 @@ export default {
   overflow-y: auto;
   right: 0;
   bottom: 10px;
-  width: 200px;
+  max-width: 200px;
+  width: 30vw;
   height: 200px;
   border: 1px dashed #aaa;
   opacity: 0.56;
   z-index: 10;
+  font-size: 12px;
   text-align: left;
   .input-box {
     position: absolute;

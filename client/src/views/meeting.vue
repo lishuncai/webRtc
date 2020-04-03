@@ -40,7 +40,7 @@
       :overlay-close="false"
       :open.sync="showEnterAccount"
     >
-      <mu-text-field v-model="account" style="width: 100%"></mu-text-field>
+      <mu-text-field v-model="account" style="width: 100%" @keyup.enter="confirmAccount"></mu-text-field>
       <p style="color: red">{{ errorMsg }}</p>
       <mu-button slot="actions" flat color="primary" @click="confirmAccount"
         >加入</mu-button

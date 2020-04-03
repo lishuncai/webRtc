@@ -4,10 +4,7 @@
       {{account}}
       <div class="main">
         <div class="button-wrapper">
-          <mu-button @click="getUserMediaStream" :disabled="isConnecting">
-            打开录像
-          </mu-button>
-          <mu-button @click="onPussSdpHandler">开始通话</mu-button>
+          <mu-button @click="onPushSdpHandler">开始通话</mu-button>
           <mu-button @click="toggleStreamHandler('video')">{{openVideo?'关闭录像':'打开录像'}}</mu-button>
           <mu-button @click="toggleStreamHandler('audio')">{{openAudio?'关闭录音':'打开录音'}}</mu-button>
           <mu-button @click="exitRoom">退出房间</mu-button>
@@ -49,7 +46,6 @@ export default {
       answer: null,
       answerOther: null,
       candidate: null,
-      isConnecting: false,
       peerList: {},
       targetUser: null,
       openVideo: true,
@@ -214,7 +210,13 @@ export default {
         }
       })
     },
-    onPussSdpHandler() {
+    async onPushSdpHandler() {
+      try {
+        await this.getUserMediaStream()
+      } catch (err) {
+        if (err) return
+      }
+      console.log('打开录像，获取本地流')
       Object.keys(this.peerList).map(name => {
         if (name !== this.account) {
           const state = this.peerList[name].connectionState
@@ -223,7 +225,7 @@ export default {
           // if (['connecting', 'connected', 'closed'].indexOf(state) > -1) {
           //   return
           // }
-          this.pussSdp(name, this.peerList[name])
+          this.pushSdp(name, this.peerList[name])
         }
       })
     },
@@ -268,7 +270,6 @@ export default {
       }
     },
     stopStream() {
-      this.isConnecting = false
       if (this.peer) {
         this.peer.close()
         this.peer = null
@@ -297,7 +298,7 @@ export default {
       this[prop] = !flag
       this.toggleStream(type, this[prop])
     },
-    toggleStream(type, enabled) {
+    async toggleStream(type, enabled) {
       let message = ''
       if (type === 'audio') {
         message = 'audio_enabled'
@@ -308,12 +309,28 @@ export default {
         sender: this.account,
         enabled
       })
-      if (this.localstream) {
-        this.localstream.getTracks().forEach(track => {
+      if (!enabled) {
+        this.localstream && this.localstream.getTracks().forEach(track => {
           if (track.kind === type) {
-            track.enabled = enabled
+            track.enabled = enabled // 单纯改变录像可渲染状态，不会关闭摄像头
+            track.stop() // 会关闭摄像头
           }
         })
+      } else {
+        let newStream = null
+        try {
+          newStream = await this.getUserMediaStream()
+        } catch (err) {
+          if (err) return
+        }
+        Object.values(this.peerList).map(peer => {
+          newStream.getTracks().forEach(track => {
+            if (track.kind === type) {
+              peer.addTrack(track, newStream)
+            }
+          })
+        })
+        this.localstream = newStream
       }
     },
     // 获取本地媒体流
@@ -355,11 +372,7 @@ export default {
           video.srcObject = stream
           video.onloadedmetadata = (e) => {
             console.log('可以播放了')
-            this.isConnecting = true
           }
-        })
-        .catch((err) => {
-          console.error(err)
         })
     },
 
@@ -410,7 +423,7 @@ export default {
       return peer
     },
     // 发送sdp消息
-    async pussSdp(target, peer) {
+    async pushSdp(target, peer) {
       if (this.localstream) {
         this.localstream.getTracks().forEach(track => peer.addTrack(track, this.localstream))
       }
