@@ -78,7 +78,8 @@ export default {
     }
   },
   beforeDestroy() {
-    this.stopStream()
+    this.stopStream(this.localstream)
+    this.$refs.mineVideo.srcObject = null
     for (const k in this.peerList) {
       this.peerList[k].close()
       this.peerList[k] = null
@@ -143,7 +144,7 @@ export default {
               return this.localstream || this.getUserMediaStream()
             })
             .then((stream) => {
-              this.localstream = stream
+              this.setNewStream(stream, this.localstream)
               if (stream) {
                 // 此行取代addStream()
                 stream.getTracks().forEach(track => peer.addTrack(track, stream))
@@ -218,7 +219,7 @@ export default {
     async onPushSdpHandler() {
       try {
         const stream = await this.getUserMediaStream()
-        this.localstream = stream
+        this.setNewStream(stream, this.localstream)
       } catch (err) {
         if (err) return
       }
@@ -267,6 +268,10 @@ export default {
       }
       console.log('跟新媒体流数组', result, this.streams)
     },
+    setNewStream(newStream, oldStream) {
+      this.stopStream(oldStream)
+      this.localstream = newStream
+    },
     removeVideoBox(v) {
       console.log('有人离开', v)
       const index = this.streams.findIndex(item => item.v === v)
@@ -275,14 +280,9 @@ export default {
         console.log('移除视频', index, v)
       }
     },
-    stopStream() {
-      if (this.peer) {
-        this.peer.close()
-        this.peer = null
-      }
-      if (this.localstream) {
-        this.localstream.getTracks().forEach(track => {
-          track.enabled = false
+    stopStream(stream) {
+      if (stream) {
+        stream.getTracks().forEach(track => {
           track.stop()
         })
       }
@@ -329,9 +329,9 @@ export default {
       } else {
         try {
           const stream = await this.getUserMediaStream()
-          this.localstream = stream
           // 切换流
-          this.changeStream(stream, type)
+          await this.changePeerStream(stream, type)
+          this.setNewStream(stream, this.localstream)
         } catch (err) {
           if (err) {
             console.error(err)
@@ -345,8 +345,8 @@ export default {
       this.camera = (flag === 'user' ? 'environment' : 'user')
       try {
         const stream = await this.getUserMediaStream()
-        this.localstream = stream
-        this.changeStream(stream, 'video')
+        await this.changePeerStream(stream, 'video')
+        this.setNewStream(stream, this.localstream)
       } catch (err) {
         if (err) {
           console.error(err)
@@ -393,13 +393,6 @@ export default {
 
       return navigator.mediaDevices.getUserMedia(this.constraints)
         .then((stream) => {
-          stream.getTracks().forEach(track => {
-            if (track.kind === 'audio') {
-              track.enabled = this.openAudio
-            } else if (track.kind === 'video') {
-              track.enabled = this.openVideo
-            }
-          })
           console.log('本地流', typeof stream)
           const video = this.$refs.mineVideo
           video.srcObject = stream
@@ -407,17 +400,28 @@ export default {
         })
     },
 
-    changeStream(stream, type) {
+    changePeerStream(stream, type) {
+      const promiseArr = []
       // 向每个peerconnection替换track
       Object.values(this.peerList).map(peer => {
-        const sender = peer.getSenders().find(function(s) {
-          return (s.track && s.track.kind === type)
-        })
-        sender && stream.getTracks().forEach(track => {
-          if (track.kind === type) {
-            sender.replaceTrack(track)
+         peer.getSenders().map(function(s) {
+          if (s.track) {
+            stream.getTracks().forEach(track => {
+              if (track.kind === s.track.kind) {
+                promiseArr.push(s.replaceTrack(track))
+              }
+            })
           }
         })
+        return Promise.all(promiseArr)
+        // const sender = peer.getSenders().find(function(s) {
+        //   return (s.track && s.track.kind === type)
+        // })
+        // sender && stream.getTracks().forEach(track => {
+        //   if (track.kind === type) {
+        //     sender.replaceTrack(track)
+        //   }
+        // })
       })
     },
 
@@ -462,7 +466,7 @@ export default {
         const streams = event.streams
         const streamType = event.track.kind
         if (!streams || streams.length < 1) return
-        // 区分流体类型
+        // 区分流体类型, 音频流，视频流
         this.updateStream(v, streams[0], streamType)
       }
       return peer

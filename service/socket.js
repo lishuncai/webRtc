@@ -78,15 +78,19 @@ function createRoom(socket, nsp) {
     const room = roomInfos.get(roomId)
     console.log('根据id查询room',typeof data.roomId, data.roomId, room)
     if (room && account) {
-      fn(null)
-      room.joins.add(account)
-      socket.join(roomId)
-      let joinsList = [...room.joins]
-      nsp.emit('joined', {
-        list: joinsList,
-        account
-      })
-      nsp.emit('roomMessage', `${account}加入了房间`)
+      if (!room.joins.has(account)) {
+        fn(null)
+        room.joins.add(account)
+        socket.join(roomId)
+        let joinsList = [...room.joins]
+        nsp.emit('joined', {
+          list: joinsList,
+          account
+        })
+        nsp.emit('roomMessage', `${account}加入了房间`)
+      } else {
+        fn('该房间成员存在相同昵称')
+      }
     } else {
       fn('房间不存在')
     }

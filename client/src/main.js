@@ -8,7 +8,7 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 import io from './socket'
-// import VConsole from 'vconsole'
+import VConsole from 'vconsole'
 
 import MuseUI from 'muse-ui'
 import Toast from 'muse-ui-toast'
@@ -29,8 +29,8 @@ Vue.config.productionTip = false
 
 console.log('adapter', adapter.browserDetails.version)
 Vue.prototype.$io = io
-// const vConsole = new VConsole()
-// console.log('vConsole', vConsole)
+const vConsole = new VConsole()
+console.log('vConsole', vConsole)
 new Vue({
   router,
   store,
