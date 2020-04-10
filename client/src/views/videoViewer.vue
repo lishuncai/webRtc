@@ -140,11 +140,16 @@ export default {
           if (peer) {
             const desc = new RTCSessionDescription(data.offer)
             peer.setRemoteDescription(desc)
-            .then(() => {
-              return this.localstream || this.getUserMediaStream()
+            .then(async () => {
+              if (this.localstream) {
+                return this.localstream
+              } else {
+                const newStream = await this.getUserMediaStream()
+                this.localstream = newStream
+                return newStream
+              }
             })
             .then((stream) => {
-              this.setNewStream(stream, this.localstream)
               if (stream) {
                 // 此行取代addStream()
                 stream.getTracks().forEach(track => peer.addTrack(track, stream))
@@ -179,23 +184,23 @@ export default {
       // 对方关闭/打开了录像
       this.socket.on('video_enabled', (data) => {
         if (data.sender) {
-          // const streamObj = this.streams.find(item => item.v === data.sender)
-          // if (streamObj.video) {
-          //   streamObj.video.forEach(track => {
-          //     track.enabled = data.enabled
-          //   })
-          // }
+          const streamObj = this.streams.find(item => item.v === data.sender)
+          if (streamObj.video) {
+            streamObj.video.forEach(track => {
+              track.enabled = data.enabled
+            })
+          }
         }
       })
       // 对方关闭/打开了录音
       this.socket.on('audio_enabled', (data) => {
         if (data.sender) {
-          // const streamObj = this.streams.find(item => item.v === data.sender)
-          // if (streamObj.audio) {
-          //   streamObj.audio.forEach(track => {
-          //     track.enabled = data.enabled
-          //   })
-          // }
+          const streamObj = this.streams.find(item => item.v === data.sender)
+          if (streamObj.audio) {
+            streamObj.audio.forEach(track => {
+              track.enabled = data.enabled
+            })
+          }
         }
       })
     },
@@ -269,7 +274,9 @@ export default {
       console.log('跟新媒体流数组', result, this.streams)
     },
     setNewStream(newStream, oldStream) {
-      this.stopStream(oldStream)
+      if (oldStream) {
+        this.stopStream(oldStream)
+      }
       this.localstream = newStream
     },
     removeVideoBox(v) {
@@ -384,12 +391,6 @@ export default {
       // 参考 https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices
       const deviceList = await navigator.mediaDevices.enumerateDevices()
       console.log('所有设备列表', JSON.stringify(deviceList))
-      // const audio = deviceList.find(device => device.kind === 'audioinput')
-      // if (audio) {
-      //   constraints.audio = {
-      //     deviceId: audio.id
-      //   }
-      // }
 
       return navigator.mediaDevices.getUserMedia(this.constraints)
         .then((stream) => {
