@@ -1,14 +1,15 @@
 <template>
   <div class="home">
-    <img
-      alt="Vue logo"
-      src="../assets/logo.png"
-    >
-
+    <router-view></router-view>
+    <h1 class="title">
+      Welcome!
+    </h1>
     <div class="input-account-wrapper">
       <label>
-        <h1>输入你的大名</h1>
-        <mu-text-field class="input-box" v-model="account" @blur="confirmAccount($event)" @keyup.enter="emitBlur($event)"></mu-text-field>
+        <p>输入你的大名</p>
+        <p>
+          <input type="text" class="input-box" v-model="account" @blur="confirmAccount($event)" @keyup.enter="emitBlur($event)" maxlength="5">
+        </p>
       </label>
     </div>
   </div>
@@ -36,6 +37,9 @@ export default {
       e.target.blur()
     },
     confirmAccount() {
+        this.$store.commit('account', this.account)
+        return
+        
       if (this.account.trim()) {
         this.$store.commit('account', this.account)
       } else {
@@ -46,13 +50,26 @@ export default {
 }
 </script>
 <style lang="scss" scoped>
+.title {
+  margin: 20px 0;
+}
 .input-account-wrapper {
   // width: 100%;
   text-align: center;
   .input-box {
-    ::v-deep input {
-      text-align: center;
+    margin-top: 8px;
+    padding: 8px;
+    font-size: 20px;
+    font-weight: bold;
+    border: 0;
+    border-bottom: 1px solid #eee;
+    &:focus {
+      border: 0;
+      border-bottom: 1px solid #ccc;
+      outline: none;
+      box-shadow: none
     }
+    text-align: center;
   }
 }
 </style>

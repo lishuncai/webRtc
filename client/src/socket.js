@@ -1,13 +1,14 @@
 import io from 'socket.io-client'
 import store from '@/store'
-import Toast from 'muse-ui-toast'
+import heyui from 'heyui'
 const spaceList = {}
 const IP = process.env.NODE_ENV === 'development'
- ? `${location.origin}` : location.origin
+  ? `${location.origin}` : location.origin
 /**
  *
  * @param {String} name /room/124
  */
+// 根据路径获取对的socket对象
 function getSocketSpace(name = '') {
   let socket = spaceList['id' + name]
   if (!socket) {
@@ -40,14 +41,14 @@ socket.on('connect', function (data) {
   store.commit('setAlive', true)
 })
 socket.on('error', function() {
-  Toast.error('hello world')
+  heyui.$message.error('hello world')
   store.commit('setAlive', false)
 })
 socket.on('disconnect', function() {
   store.commit('setAlive', false)
 })
 socket.on('news', function (data) {
-  Toast.info(data)
+  heyui.$message.info(data)
 })
 
 export default {

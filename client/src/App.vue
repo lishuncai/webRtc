@@ -1,22 +1,17 @@
 <template>
   <div id="app">
-    <div id="nav">
-      <mu-appbar style="width: 100%;" color="primary">
-          <router-link to="/">
-            Home
-          </router-link>/
-          <router-link to="/video">
-            本地1V1
-          </router-link>/
-          <router-link to="/meeting">
-            会议室
-          </router-link>
-      </mu-appbar>
-    </div>
-      <router-view />
+      <router-view name="nav"></router-view>
+      <router-view default></router-view>
   </div>
 </template>
-
+<script>
+document.documentElement.style = '--color-theme: #2196f3'
+export default {
+  data() {
+    return {}
+  }
+}
+</script>
 <style lang="scss">
 #app {
   font-family: Roboto, Helvetica, Arial, sans-serif;
@@ -24,17 +19,8 @@
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
+  width: 100%;
+  min-height: 100%;
   overflow: auto;
-}
-
-#nav {
-
-  a {
-    font-weight: bold;
-    color: #fff;
-    &.router-link-exact-active {
-      color: #47d495
-    }
-  }
 }
 </style>

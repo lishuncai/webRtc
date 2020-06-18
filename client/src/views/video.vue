@@ -1,8 +1,8 @@
 <template>
   <div class="video-wrapper">
-    <mu-button flat @click="getUserMediaStream">点击录像</mu-button>/
-    <mu-button flat @click="stopStream">关闭录像</mu-button>/
-    <mu-button flat @click="call">Call他</mu-button>
+    <Button flat @click="getUserMediaStream">点击录像</Button>/
+    <Button flat @click="stopStream">关闭录像</Button>/
+    <Button flat @click="call">Call他</Button>
     <video
       id="rtcA"
       ref="videoA"

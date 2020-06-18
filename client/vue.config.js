@@ -3,11 +3,11 @@ module.exports = {
     ? '/webRtc'
     : '/',
   css: {
-    extract: false
+    extract: process.env.NODE_ENV === 'production'
   },
   configureWebpack: config => {
     if (process.env.NODE_ENV === 'production') {
-       config.optimization.minimizer[0].options.terserOptions.compress.drop_console = false
+      config.optimization.minimizer[0].options.terserOptions.compress.drop_console = false
     }
   },
   devServer: {
