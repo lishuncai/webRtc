@@ -36,6 +36,8 @@
     "less": "^3.11.3",
     "less-loader": "^6.1.1",
     "lint-staged": "^9.5.0",
+    "postcss-loader": "^3.0.0",
+    "postcss-px-to-viewport": "^1.1.1",
     "sass": "^1.25.0",
     "sass-loader": "^8.0.2",
     "vue-template-compiler": "^2.6.11"

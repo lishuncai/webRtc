@@ -33,7 +33,7 @@ const routes = [
   // },
 
   {
-    path: '/Room/:roomId',
+    path: '/room/:roomId',
     name: 'room',
     component: () => import(/* webpackChunkName: "room" */ '../views/Room')
   }

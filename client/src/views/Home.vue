@@ -37,9 +37,6 @@ export default {
       e.target.blur()
     },
     confirmAccount() {
-        this.$store.commit('account', this.account)
-        return
-        
       if (this.account.trim()) {
         this.$store.commit('account', this.account)
       } else {

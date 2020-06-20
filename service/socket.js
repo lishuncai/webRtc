@@ -47,7 +47,7 @@ io.on('connection', function (socket) {
   socket.on('disconnect', function () { // 这里监听 disconnect，就可以知道谁断开连接了
     if (socketIdMap.has(socket.id)) {
       const info = socketIdMap.get(socket.id)
-      console.log(info, '断开连接')
+      console.log(info, '断开连接', new Date())
       const room = roomInfos.get(info.roomId)
       if (room && room.joins) {
         room.joins.delete(info.account)
@@ -67,7 +67,7 @@ function createRoom(socket, nsp) {
     let result = roomInfos.get(roomId)
     console.log('roomInfos:', [...roomInfos], '\n', 'roomId:result',roomId, result)
     if (result) {
-      fn ('', result)
+      fn ('', toArray(result))
     } else {
       fn('找不到房间')
     }
@@ -82,9 +82,8 @@ function createRoom(socket, nsp) {
         fn(null)
         room.joins.add(account)
         socket.join(roomId)
-        let joinsList = [...room.joins]
         nsp.emit('joined', {
-          list: joinsList,
+          roomInfo: toArray(room),
           account
         })
         nsp.emit('roomMessage', `${account}加入了房间`)
@@ -99,7 +98,7 @@ function createRoom(socket, nsp) {
   socket.on('chat', function(data) {
     nsp.emit('roomMessage', data)
   })
-  socket.on('leave', function(data){
+  socket.on('leave', function(data, fn){
     let {roomId, account} = data
     let room = roomInfos.get(roomId)
     if (room) {
@@ -111,8 +110,9 @@ function createRoom(socket, nsp) {
         socket.leave(roomId)
         nsp.close && nsp.close()
       } else {
-        socket.broadcast.emit('leave', account)
+        nsp.emit('leave', account)
       }
+      fn(toArray(room))
     }
   })
   socket.on('offer', function(data) {
@@ -124,4 +124,9 @@ function createRoom(socket, nsp) {
   socket.on('candidate', function(data) {
     socket.broadcast.emit('candidate', data)
   })
+}
+
+function toArray(roomInfo) {
+  let joinsList = [...roomInfo.joins]
+  return Object.assign({}, roomInfo, {joins: joinsList})
 }

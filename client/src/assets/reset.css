@@ -46,3 +46,43 @@ h6 {
    fill: currentColor;
    overflow: hidden;
 }
+
+
+.text-overflow {
+	text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+svg, button {
+	user-select: none;
+}
+.loading--dot:after {
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: bottom;
+    animation: dot 2s infinite steps(3, end);
+    content: "\2026"; /* ascii code for the dot character */
+}
+@keyframes dot {
+    from {
+        width: 2px;
+    }
+    to {
+        width: 15px;
+    }
+}
+
+
+.text-overflow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: var(--line);
+  -webkit-box-orient: vertical;
+}
+.text-overflow-1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

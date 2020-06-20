@@ -2,24 +2,28 @@
   <div class="Room">
     <div class="room-top-bar">
       <div class="munber-control">
+      <DropdownCustom class="menu-list">
         <svg class="icon" aria-hidden="true">
           <use xlink:href="#icon-people"></use>
         </svg>
-        <span class="count">{{peopleCounts}}</span>
+        <span class="count">{{joiners.length}}</span>
+        <div slot="content" v-width="200" style="max-height: 200px;overflow-y: auto">
+          <div v-for="(joiner, index) in joiners" class="top-bar-number-list text-overflow-1" :key="index">
+            <span>{{joiner  | splicText}}</span>
+            <Button v-if="isCreater && (joiner !== account)" size="xs" @click="putOut(joiner)" color="primary">踢出</Button>
+            <span v-if="creater === joiner"  style="color: #aaa">房主</span>
+          </div>
+        </div>
+      </DropdownCustom>
       </div>
-      <p class="room-info">房主：{{ creater }} / 房号：{{ roomId }}</p>
+
+      <p class="room-info">房主：{{ creater && creater | splicText }} / 房号：{{ roomId }}</p>
     </div>
-    <div class="note-wrapper">
-      <div ref="noteWrapper"></div>
-      <div class="input-box">
-        <i v-svgIcon="'#icon-enter'" class="svg-icon" @click="sendMsg"></i>
-        <input type="text" v-model="chatMssage" @keyup.enter="sendMsg" />
-      </div>
-    </div>
+
     <div class="btn-wrapper">
-      <div class="icon-text call" @click="onPushSdpHandler">
+      <div class="icon-text call"  @click="onPushSdpHandler" :class="!isStart?'on':'off'" :disabled="isStart">
         <i v-svgIcon="'#icon-callout'" class="svg-icon"></i>
-        <span>通话</span>
+        <span>{{!!this.localstream?'刷新':'开始'}}</span>
       </div>
       <div class="icon-text call" :class="openVideo?'on':'off'" @click="toggleStreamHandler('video')">
         <i v-svgIcon="'#icon-camera'" class="svg-icon"></i>
@@ -31,7 +35,7 @@
       </div>
      <div class="icon-text call" @click="onChangerCamera">
         <i v-svgIcon="'#icon-Switch'" class="svg-icon"></i>
-        <span>切换相机</span>
+        <span>{{showCameraSelected}}</span>
       </div>
       <div class="icon-text call"  @click="exitRoom">
         <i v-svgIcon="'#icon-exit'" class="svg-icon"></i>
@@ -40,20 +44,30 @@
     </div>
     <!--显示区域-->
     <div class="main show-area">
+      <!--显示消息区域-->
+      <div class="note-wrapper">
+        <div ref="noteWrapper" class="msg-list"></div>
+        <div class="input-box">
+          <i v-svgIcon="'#icon-enter'" class="svg-icon" @click="sendMsg"></i>
+          <input type="text" v-model="chatMssage" @keyup.enter="sendMsg" />
+        </div>
+      </div>
       <div class="show-area-big">
         <audio v-if="bigVideo" :src-object.prop.camel="bigVideo.audio"></audio>
-        <video v-if="bigVideo" ref="currentVideo" class="current-video" :src-object.prop.camel="bigVideo.video" autoplay />
+        <video v-if="bigVideo" ref="currentVideo" class="current-video" :class="{mine:currentUser === account, off: !openVideo}" :src-object.prop.camel="bigVideo.video" autoplay />
       </div>
       <div class="others" ref="othersBox">
-        <div class="other-show-box">
-          <video ref="mineVideo" class="mime-video" src="" autoplay />
-          <p class="username">{{account}}</p>
-        </div>
-        <div class="other-show-box" v-for="(item, index) in streams" :key="index">
+        <div class="other-show-box text-overflow-1" v-for="(item, index) in streams" :key="index" :class="{current: item.v === currentUser}">
           <audio v-if="item.audio" :src-object.prop.camel="item.audio"></audio>
-          <video class="others-show-video" :src-object.prop.camel="item.video" autoplay playsinline></video>
+          <video
+            class="others-show-video"
+            :class="{mine:item.v === account, off: !openVideo}"
+            :src-object.prop.camel="item.video"
+            @click="showCurrent(item)"
+            autoplay
+            playsinline></video>
           <p class="username">{{item.v}}</p>
-        </div>      
+        </div>
       </div>
     </div>
   </div>
@@ -61,7 +75,7 @@
 
 <script>
 export default {
-  name: 'Room',
+  name: 'room',
   data() {
     return {
       creater: null,
@@ -69,24 +83,35 @@ export default {
       roomInfo: null,
       chatMssage: '',
       isCreater: false,
-      peopleCounts: 0,
-
       socket: null,
       peer: null,
       localstream: null,
       streams: [],
-      offer: null,
-      answer: null,
+
       answerOther: null,
-      candidate: null,
       peerList: {},
       targetUser: null,
       openVideo: true,
       openAudio: true,
-      camera: 'user' // user, environment
+      camera: 'user', // user, environment (前后摄像头)
+      isCalling: true,
+      currentUser: null
     }
   },
+
+  filters: {
+    splicText(text) {
+      const limit = 5
+      if (text && text.length > limit) {
+        return text.slice(0, limit) + '..'
+      } else {
+        return text
+      }
+    }
+  },
+
   beforeRouteEnter (to, from, next) {
+    // 如何路径不对或者从连接直接进入的，跳回首页
     if (to.params.roomId) {
       next()
     } else {
@@ -96,27 +121,35 @@ export default {
   beforeDestroy() {
     this.socket && this.socket.close()
     this.stopStream(this.localstream)
+    for (const item of this.streams) {
+      this.stopStream(item.video)
+      this.stopStream(item.audio)
+    }
     for (const k in this.peerList) {
       this.peerList[k].close()
       this.peerList[k] = null
       delete this.peerList[k]
     }
-    this.$refs.mineVideo.srcObject = null
   },
 
   beforeRouteLeave(to, from, next) {
-    if (from.name === 'room') {
-      this.levelRoom()
-    }
-    next()
+    this.$Confirm('确定退出？').then(() => {
+      this.leaveRoom(this.account)
+      // 退出后切断socket连接
+      this.$io.deleteSocket(this.$route.fullPath)
+      next()
+    }).catch((err) => {
+      next(false)
+      console.error(err)
+    })
   },
 
   created() {
     if (this.account) {
-      this.roomId  = this.$route.params.roomId
+      this.roomId = this.$route.params.roomId
+      this.currentUser = this.account
       if (this.roomId) {
-        const path = `/room/${this.roomId}`
-        this.socket = this.$io.getSocketSpace(path)
+        this.socket = this.$io.getSocketSpace(this.$route.fullPath)
       } else {
         this.$Message('未找到房间id')
       }
@@ -150,7 +183,24 @@ export default {
       }
     },
     bigVideo() {
-      return this.streams[1] || this.streams[0]
+      if (this.currentUser) {
+        return this.streams.filter(item => item.v === this.currentUser)[0]
+      } else {
+        return this.streams[1] || this.streams[0]
+      }
+    },
+    joiners() {
+      return this.roomInfo?.joins || []
+    },
+    isStart() {
+      return !!this.localstream
+    },
+    showCameraSelected() {
+      if (this.camera === 'user') {
+        return '前摄像头'
+      } else {
+        return '后摄像头'
+      }
     }
   },
   methods: {
@@ -167,13 +217,24 @@ export default {
       })
       this.socket.on('joined', (data) => {
         console.log('onjoined', data)
-        this.onJoined(data.list, data.account)
+        this.roomInfo = data.roomInfo
+        this.onJoined(data.roomInfo.joins, data.account)
       })
-      this.socket.on('leave', (data) => {
+      this.socket.on('leave', async (data) => {
         if (data) {
           this.peerList[data] = null
           delete this.peerList[data]
           this.removeVideoBox(data)
+        }
+        // 如果被通知离开房间，为被踢出
+        if (data === this.account) {
+          this.$io.deleteSocket(this.$route.fullPath)
+          if (!this.creater) {
+             this.$Message.warn('你被房主踢出')
+          }
+          this.$router.push('/meeting')
+        } else {
+          this.getRoomInfo()
         }
       })
       this.socket.on('candidate', (data) => {
@@ -212,15 +273,24 @@ export default {
           console.log('搜到offer')
           const peer = this.peerList[data.sender]
           if (peer) {
+            // 如何peer正常，则无需再交互
+            if (this.checkPeerAbled(peer)) return
+
             const desc = new RTCSessionDescription(data.offer)
             peer.setRemoteDescription(desc)
               .then(async () => {
                 if (this.localstream) {
                   return this.localstream
                 } else {
-                  const newStream = await this.getUserMediaStream()
-                  this.localstream = newStream
-                  return newStream
+                  // 提醒用户接入会议
+                  const allow = await this.userSetStart()
+                  if (allow) {
+                    const newStream = await this.getUserMediaStream()
+                    this.setNewStream(newStream, this.localstream)
+                    return newStream
+                  } else {
+                    throw new Error('user no allow')
+                  }
                 }
               })
               .then((stream) => {
@@ -280,7 +350,7 @@ export default {
     },
     setMyStreamState(stream) {
       this.localstream.getTracks().forEach(track => {
-        if ((track.kind === 'video' && !this.openVideo)||(track.kind === 'audio' && !this.openAudio)) {
+        if ((track.kind === 'video' && !this.openVideo) || (track.kind === 'audio' && !this.openAudio)) {
           track.enabled = false // 单纯改变录像可渲染状态，不会关闭摄像头
           track.stop()
         }
@@ -331,6 +401,8 @@ export default {
           // console.log('没有获取到候选信息')
         }
       }
+
+      // peer对象接受到流信息
       peer.ontrack = (event) => {
         console.log('ontrack', event)
         const streams = event.streams
@@ -370,7 +442,7 @@ export default {
         roomId: this.roomId
       }, (err) => {
         if (!err) {
-
+          // 加入成功
         } else {
           this.$Message.warn(err)
         }
@@ -382,11 +454,17 @@ export default {
         this.chatMssage = ''
       }
     },
-    levelRoom() {
+    leaveRoom(account) {
       if (this.socket) {
         this.socket.emit('leave', {
           roomId: this.roomId,
-          account: this.account
+          account
+        }, (roomInfo, err) => {
+          if (err) {
+            this.$Message.error(err)
+          } else {
+            this.roomInfo = roomInfo
+          }
         })
       }
     },
@@ -417,30 +495,31 @@ export default {
       }
     },
     exitRoom() {
-      this.$Confirm('确定退出？').then(() => {
-        this.$router.push({
-          path: '/meeting'
-        })
-      }).catch(() => {});
+      this.$router.push({
+        path: '/meeting'
+      })
     },
 
     async onPushSdpHandler() {
+      if (this.localstream) return
       this.$Loading()
       try {
         const stream = await this.getUserMediaStream()
         this.setNewStream(stream, this.localstream)
         this.setMyStreamState(stream)
       } catch (err) {
-        if (err) return
+        if (err) {
+          console.error(err)
+          this.$Message.error(err.message)
+          return
+        }
+      } finally {
+        this.$Loading.close()
       }
-      this.$Loading.close()
       console.log('打开录像，获取本地流')
       Object.keys(this.peerList).map(name => {
         if (name !== this.account) {
-          const state = this.peerList[name].connectionState
-          console.log('peer 连接状态', state)
-          // peer状态详见MDN https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
-          if (['connecting', 'connected'].indexOf(state) > -1) {
+          if (this.checkPeerAbled(this.peerList[name])) {
             return
           }
           this.pushSdp(name, this.peerList[name])
@@ -453,6 +532,7 @@ export default {
         this.stopStream(oldStream)
       }
       this.localstream = newStream
+      this.updateStream(this.account, this.localstream, 'video')
     },
 
     stopStream(stream) {
@@ -501,8 +581,7 @@ export default {
         //     track.stop()
         //   }
         // })
-          this.setMyStreamState(this.localstream)
-
+        this.setMyStreamState(this.localstream)
       } else {
         try {
           const stream = await this.getUserMediaStream()
@@ -510,7 +589,6 @@ export default {
           await this.changePeerStream(stream, type)
           this.setNewStream(stream, this.localstream)
           this.setMyStreamState(stream)
-
         } catch (err) {
           if (err) {
             console.error(err)
@@ -522,11 +600,12 @@ export default {
     async onChangerCamera() {
       const flag = this.camera
       this.camera = (flag === 'user' ? 'environment' : 'user')
+      if (!this.localstream) return
       try {
         const stream = await this.getUserMediaStream()
         await this.changePeerStream(stream, 'video')
         this.setNewStream(stream, this.localstream)
-        this.setMyStreamState(stream)        
+        this.setMyStreamState(stream)
       } catch (err) {
         if (err) {
           console.error(err)
@@ -568,8 +647,8 @@ export default {
       return navigator.mediaDevices.getUserMedia(this.constraints)
         .then((stream) => {
           console.log('本地流', typeof stream)
-          const video = this.$refs.mineVideo
-          video.srcObject = stream
+          // const video = this.$refs.mineVideo
+          // video.srcObject = stream
           return stream
         })
     },
@@ -578,7 +657,7 @@ export default {
       const promiseArr = []
       // 向每个peerconnection替换track
       Object.values(this.peerList).map(peer => {
-        let sender = peer.getSenders()
+        const sender = peer.getSenders()
         sender.map(function(s) {
           if (s.track) {
             stream.getTracks().forEach(track => {
@@ -622,6 +701,29 @@ export default {
         target: target,
         offer: peer.localDescription
       }) // 呼叫端设置本地 offer 描述
+    },
+
+    showCurrent(item) {
+      this.currentUser = item.v
+    },
+
+    putOut(joiner) {
+      this.leaveRoom(joiner)
+      document.body.click()
+    },
+
+    checkPeerAbled(peer) {
+      const state = peer.connectionState
+      console.log('checkPeerAbled', state)
+      // peer状态详见MDN https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
+      return ['connecting', 'connected'].indexOf(state) > -1
+    },
+    userSetStart() {
+      return this.$Confirm('请求开始会议', '通 知').then(() => {
+        return true
+      }).catch(() => {
+        this.$Message.error('已取消')
+      })
     }
   }
 }
