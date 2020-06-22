@@ -95,7 +95,8 @@ export default {
       openAudio: true,
       camera: 'user', // user, environment (前后摄像头)
       isCalling: true,
-      currentUser: null
+      currentUser: null,
+      isPutout: false // 是否被踢出
     }
   },
 
@@ -119,7 +120,8 @@ export default {
     }
   },
   beforeDestroy() {
-    this.socket && this.socket.close()
+    this.leaveRoom(this.account)
+    this.$io.deleteSocket(this.$route.fullPath)
     this.stopStream(this.localstream)
     for (const item of this.streams) {
       this.stopStream(item.video)
@@ -133,15 +135,17 @@ export default {
   },
 
   beforeRouteLeave(to, from, next) {
-    this.$Confirm('确定退出？').then(() => {
-      this.leaveRoom(this.account)
-      // 退出后切断socket连接
-      this.$io.deleteSocket(this.$route.fullPath)
+    if (!this.isPutout) {
+      this.$Confirm('确定退出？').then(() => {
+        // 退出后切断socket连接
+        next()
+      }).catch((err) => {
+        next(false)
+        console.error(err)
+      })
+    } else {
       next()
-    }).catch((err) => {
-      next(false)
-      console.error(err)
-    })
+    }
   },
 
   created() {
@@ -155,7 +159,7 @@ export default {
       }
     } else {
       this.$Message('请先输入昵称')
-      this.$router.push('/')
+      this.$router.replace('/')
     }
   },
   mounted() {
@@ -228,11 +232,11 @@ export default {
         }
         // 如果被通知离开房间，为被踢出
         if (data === this.account) {
-          this.$io.deleteSocket(this.$route.fullPath)
+          this.isPutout = true
           if (!this.creater) {
-             this.$Message.warn('你被房主踢出')
+            this.$Message.warn('你被房主踢出')
           }
-          this.$router.push('/meeting')
+          this.$router.replace('/meeting')
         } else {
           this.getRoomInfo()
         }
@@ -283,14 +287,15 @@ export default {
                   return this.localstream
                 } else {
                   // 提醒用户接入会议
-                  const allow = await this.userSetStart()
-                  if (allow) {
-                    const newStream = await this.getUserMediaStream()
-                    this.setNewStream(newStream, this.localstream)
-                    return newStream
-                  } else {
-                    throw new Error('user no allow')
-                  }
+                  // const allow = await this.userSetStart()
+                  // if (allow) {
+
+                  // } else {
+                  //   throw new Error('user no allow')
+                  // }
+                  const newStream = await this.getUserMediaStream()
+                  this.setNewStream(newStream, this.localstream)
+                  return newStream
                 }
               })
               .then((stream) => {
@@ -349,7 +354,7 @@ export default {
       })
     },
     setMyStreamState(stream) {
-      this.localstream.getTracks().forEach(track => {
+      stream.getTracks().forEach(track => {
         if ((track.kind === 'video' && !this.openVideo) || (track.kind === 'audio' && !this.openAudio)) {
           track.enabled = false // 单纯改变录像可渲染状态，不会关闭摄像头
           track.stop()
@@ -434,6 +439,7 @@ export default {
           [type]: stream
         })
       }
+      this.$forceUpdate()
       console.log('跟新媒体流数组', result, this.streams)
     },
     emitJoin() {
@@ -495,7 +501,7 @@ export default {
       }
     },
     exitRoom() {
-      this.$router.push({
+      this.$router.replace({
         path: '/meeting'
       })
     },
@@ -505,8 +511,8 @@ export default {
       this.$Loading()
       try {
         const stream = await this.getUserMediaStream()
-        this.setNewStream(stream, this.localstream)
         this.setMyStreamState(stream)
+        this.setNewStream(stream, this.localstream)
       } catch (err) {
         if (err) {
           console.error(err)
@@ -569,10 +575,10 @@ export default {
         message = 'video_enabled'
       }
       console.log('message', message)
-      this.socket.emit(message, {
-        sender: this.account,
-        enabled
-      })
+      // this.socket.emit(message, {
+      //   sender: this.account,
+      //   enabled
+      // })
       // 替换/替换流(可用于前后摄像头切换) ，参考： https://stackoverflow.com/questions/39126347/webrtc-switch-camera
       if (!enabled) {
         // this.localstream.getTracks().forEach(track => {
@@ -587,8 +593,8 @@ export default {
           const stream = await this.getUserMediaStream()
           // 切换流
           await this.changePeerStream(stream, type)
-          this.setNewStream(stream, this.localstream)
           this.setMyStreamState(stream)
+          this.setNewStream(stream, this.localstream)
         } catch (err) {
           if (err) {
             console.error(err)
@@ -662,9 +668,7 @@ export default {
           if (s.track) {
             stream.getTracks().forEach(track => {
               if (track.kind === s.track.kind) {
-                if (s.track.kind === type) {
-                  promiseArr.push(s.replaceTrack(track))
-                }
+                promiseArr.push(s.replaceTrack(track))
               }
             })
           }

@@ -19,7 +19,7 @@ module.exports = {
     proxy: {
       '/socket.io': {
         ws: true,
-        target: 'ws://0.0.0.0:3001', // 后端目标接口地址
+        target: 'http://localhost:3001', // 后端目标接口地址
         changeOrigin: true // 是否允许跨域
       }
     }
