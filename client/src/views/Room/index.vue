@@ -54,7 +54,7 @@
       </div>
       <div class="show-area-big">
         <audio v-if="bigVideo" :src-object.prop.camel="bigVideo.audio"></audio>
-        <video v-if="bigVideo" ref="currentVideo" class="current-video" :class="{mine:currentUser === account, off: !openVideo}" :src-object.prop.camel="bigVideo.video" autoplay />
+        <video v-if="bigVideo" ref="currentVideo" class="current-video" :class="{off: !openVideo}" :src-object.prop.camel="bigVideo.video" autoplay />
       </div>
       <div class="others" ref="othersBox">
         <div class="other-show-box text-overflow-1" v-for="(item, index) in streams" :key="index" :class="{current: item.v === currentUser}">
@@ -95,8 +95,8 @@ export default {
       openAudio: true,
       camera: 'user', // user, environment (前后摄像头)
       isCalling: true,
-      currentUser: null,
-      isPutout: false // 是否被踢出
+      isPutout: false, // 是否被踢出
+      currentUserDefault: null
     }
   },
 
@@ -151,7 +151,6 @@ export default {
   created() {
     if (this.account) {
       this.roomId = this.$route.params.roomId
-      this.currentUser = this.account
       if (this.roomId) {
         this.socket = this.$io.getSocketSpace(this.$route.fullPath)
       } else {
@@ -186,12 +185,16 @@ export default {
         audio: true
       }
     },
-    bigVideo() {
-      if (this.currentUser) {
-        return this.streams.filter(item => item.v === this.currentUser)[0]
-      } else {
-        return this.streams[1] || this.streams[0]
+    currentUser: {
+      get() {
+        return this.currentUserDefault || this.roomInfo?.joins[0]
+      },
+      set(v) {
+        this.currentUserDefault = v
       }
+    },
+    bigVideo() {
+      return this.streams.filter(item => item.v === this.currentUser)[0]
     },
     joiners() {
       return this.roomInfo?.joins || []
@@ -300,8 +303,11 @@ export default {
               })
               .then((stream) => {
                 if (stream) {
-                // 此行取代addStream()
-                  stream.getTracks().forEach(track => peer.addTrack(track, stream))
+                  try {
+                    stream.getTracks().forEach(track => peer.addTrack(track, stream))
+                  } catch (err) {
+                    throw (err.message)
+                  }
                 }
                 return peer.createAnswer()
               }, (err) => {
@@ -378,12 +384,15 @@ export default {
       const iceServer = {
         iceServers: [
           {
-            urls: 'stun:47.106.9.184:3478'
+            urls: 'stun:stun.stunprotocol.org'
           },
+          // {
+          //   urls: 'stun:47.106.9.184:3478'
+          // },
           {
-            urls: 'turn:shsg.vip:3478',
+            urls: 'turn:47.106.9.184:3478',
             username: 'shsg',
-            credential: 'shsg'
+            credential: '123456'
           }
           // {
           //   urls: 'stun:stun.stunprotocol.org'
@@ -434,7 +443,8 @@ export default {
       if (result) {
         result[type] = stream
       } else {
-        this.streams.push({
+        const prop = v === this.account ? 'unshift' : 'push'
+        this.streams[prop]({
           v,
           [type]: stream
         })

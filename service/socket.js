@@ -53,7 +53,9 @@ io.on('connection', function (socket) {
         room.joins.delete(info.account)
       }
       socket.broadcast.emit('leave', info.account)
-      socketIdMap.delete(socket.id)      
+      socketIdMap.delete(socket.id)
+      const nsp = io.of(`/room/${info.roomId}`)
+      nsp.emit('leave', info.account)
     }
   })
 });
